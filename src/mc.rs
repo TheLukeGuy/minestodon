@@ -1,3 +1,4 @@
+use crate::mc::handshake::HandshakePacket;
 use crate::mc::packet_io::{PacketReadExt, PacketWriteExt, PartialVarInt, VarInt};
 use anyhow::{Context, Result};
 use flate2::read::GzDecoder;
@@ -6,6 +7,7 @@ use flate2::Compression;
 use std::io::{Read, Write};
 use std::net::TcpStream;
 
+pub mod handshake;
 pub mod packet_io;
 
 pub struct Connection {
@@ -64,7 +66,10 @@ impl Connection {
 
                     let mut slice = &body[..];
                     let id = slice.read_var().context("failed to read the packet ID")?;
-                    let decoded = self.state.decode_packet(id, &mut slice);
+                    let decoded = self
+                        .state
+                        .decode_packet(id, &mut slice)
+                        .context("failed to decode the packet")?;
                     packets.push(decoded);
                 }
                 partial => self.packet = Some(partial),
@@ -73,9 +78,14 @@ impl Connection {
         Ok(packets)
     }
 
-    pub fn send_packet(&mut self, packet: impl PacketFromServer) -> Result<()> {
+    pub fn send_packet<P: PacketFromServer>(&mut self, packet: P) -> Result<()> {
         let mut data_buf = Vec::with_capacity(1024);
-        packet.write(&mut data_buf);
+        data_buf
+            .write_var(P::ID)
+            .context("failed to write the packet ID to an internal buffer")?;
+        packet
+            .write(&mut data_buf)
+            .context("failed to write the packet data to an internal buffer")?;
 
         let data_len = data_buf
             .len()
@@ -129,16 +139,24 @@ pub enum ConnectionState {
 }
 
 impl ConnectionState {
-    pub fn decode_packet<R: Read>(&self, _id: i32, _buf: &mut R) -> ReceivedPacket {
-        todo!("no packets have been implemented yet");
+    pub fn decode_packet(&self, id: i32, buf: &mut impl Read) -> Result<ReceivedPacket> {
+        let packet = match self {
+            ConnectionState::Handshake => {
+                ReceivedPacket::Handshake(HandshakePacket::decode(id, buf)?)
+            }
+            ConnectionState::Status => todo!(),
+            ConnectionState::Login => todo!(),
+            ConnectionState::Play => todo!(),
+        };
+        Ok(packet)
     }
 }
 
 pub enum ReceivedPacket {
-    Handshake,
-    DuringStatus,
-    DuringLogin,
-    DuringPlay,
+    Handshake(HandshakePacket),
+    Status,
+    Login,
+    Play,
 }
 
 enum PartialPacket {
@@ -183,11 +201,41 @@ impl PartialPacket {
 }
 
 pub trait PacketFromServer {
-    fn write<W: Write>(&self, buf: &mut W);
+    const ID: i32;
+
+    fn write<W: Write>(&self, buf: &mut W) -> Result<()>;
 }
 
-pub trait PacketFromClient {
-    const STATE: ConnectionState;
+pub trait PacketFromClient: Sized {
+    const ID: i32;
 
-    fn read<R: Read>(buf: &mut R) -> Self;
+    fn read<R: Read>(buf: &mut R) -> Result<Self>;
+}
+
+#[macro_export]
+macro_rules! packets_from_client {
+    ($enum_name:ident, $state_name:expr, [$($packet:ident),* $(,)?] $(,)?) => {
+        // This will make IDEs treat $packet values primarily as types rather than enum variants
+        // For auto-complete and more intuitive syntax highlighting
+        const _: *const ($($packet),*) = ::std::ptr::null();
+
+        pub enum $enum_name {
+            $(
+                $packet($packet),
+            )*
+        }
+
+        impl $enum_name {
+            #[allow(unreachable_code, unused_variables)]
+            pub fn decode(id: i32, buf: &mut impl ::std::io::Read) -> ::anyhow::Result<Self> {
+                let packet = match id {
+                    $(
+                        $packet::ID => Self::$packet($packet::read(buf)?),
+                    )*
+                    id => ::anyhow::bail!("invalid {} packet ID {id:#04x}", $state_name),
+                };
+                ::std::result::Result::Ok(packet)
+            }
+        }
+    };
 }
