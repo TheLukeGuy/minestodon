@@ -1,5 +1,6 @@
 use crate::mc::handshake::HandshakePacket;
 use crate::mc::packet_io::{PacketReadExt, PacketWriteExt, PartialVarInt, VarInt};
+use crate::mc::status::StatusPacket;
 use anyhow::{Context, Result};
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
@@ -9,6 +10,7 @@ use std::net::TcpStream;
 
 pub mod handshake;
 pub mod packet_io;
+pub mod status;
 
 pub struct Connection {
     pub stream: TcpStream,
@@ -144,7 +146,7 @@ impl ConnectionState {
             ConnectionState::Handshake => {
                 ReceivedPacket::Handshake(HandshakePacket::decode(id, buf)?)
             }
-            ConnectionState::Status => todo!(),
+            ConnectionState::Status => ReceivedPacket::Status(StatusPacket::decode(id, buf)?),
             ConnectionState::Login => todo!(),
             ConnectionState::Play => todo!(),
         };
@@ -154,7 +156,7 @@ impl ConnectionState {
 
 pub enum ReceivedPacket {
     Handshake(HandshakePacket),
-    Status,
+    Status(StatusPacket),
     Login,
     Play,
 }

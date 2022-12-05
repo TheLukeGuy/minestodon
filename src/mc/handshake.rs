@@ -69,7 +69,7 @@ pub struct LegacyPingResponse {
     pub version: i32,
     pub version_name: String,
     pub motd: String,
-    pub players: i32,
+    pub current_players: i32,
     pub max_players: i32,
 }
 
@@ -77,7 +77,7 @@ impl LegacyPingResponse {
     pub fn response_string(&self) -> String {
         format!(
             "\u{00a7}1\0{}\0{}\0{}\0{}\0{}",
-            self.version, self.version_name, self.motd, self.players, self.max_players
+            self.version, self.version_name, self.motd, self.current_players, self.max_players
         )
     }
 }

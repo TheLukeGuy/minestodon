@@ -8,3 +8,6 @@ anyhow = "1.0.66"
 byteorder = "1.4.3"
 flate2 = "1.0.25"
 num_enum = "0.5.7"
+serde = { version = "1.0.149", features = ["derive"] }
+serde_json = "1.0.89"
+uuid = { version = "1.2.2", features = ["serde"] }
