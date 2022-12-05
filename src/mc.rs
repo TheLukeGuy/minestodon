@@ -1,6 +1,6 @@
-use crate::mc::handshake::HandshakePacket;
+use crate::mc::handshake::{HandshakePacket, LegacyPingResponse, NextState};
 use crate::mc::packet_io::{PacketReadExt, PacketWriteExt, PartialVarInt, VarInt};
-use crate::mc::status::StatusPacket;
+use crate::mc::status::{Listing, PingResponse, StatusPacket, StatusResponse};
 use anyhow::{Context, Result};
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
@@ -130,6 +130,66 @@ impl Connection {
             .write_all(&buf)
             .context("failed to send the packet body")
     }
+
+    pub fn handle_pre_play_packet(
+        &mut self,
+        packet: &ReceivedPacket,
+        listing: impl FnOnce() -> Listing,
+        legacy_listing: impl FnOnce() -> Listing,
+    ) -> Result<PacketHandleResult> {
+        let result = match packet {
+            ReceivedPacket::Handshake(packet) => {
+                self.handle_handshake_packet(packet, legacy_listing)?;
+                PacketHandleResult::Handled
+            }
+            ReceivedPacket::Status(packet) => {
+                self.handle_status_packet(packet, listing)?;
+                PacketHandleResult::Handled
+            }
+            _ => PacketHandleResult::Unhandled,
+        };
+        Ok(result)
+    }
+
+    fn handle_handshake_packet(
+        &mut self,
+        packet: &HandshakePacket,
+        legacy_listing: impl FnOnce() -> Listing,
+    ) -> Result<()> {
+        match packet {
+            HandshakePacket::Handshake(handshake) => match handshake.next_state {
+                NextState::Status => self.state = ConnectionState::Status,
+                NextState::Login => self.state = ConnectionState::Login,
+            },
+            HandshakePacket::LegacyPingRequest(_) => {
+                let response = LegacyPingResponse(legacy_listing());
+                self.send_packet(response)
+                    .context("failed to send a legacy ping response")?;
+            }
+        }
+        Ok(())
+    }
+
+    fn handle_status_packet(
+        &mut self,
+        packet: &StatusPacket,
+        listing: impl FnOnce() -> Listing,
+    ) -> Result<()> {
+        match packet {
+            StatusPacket::StatusRequest(_) => {
+                let response = StatusResponse(listing());
+                self.send_packet(response)
+                    .context("failed to send a status response")?;
+            }
+            StatusPacket::PingRequest(request) => {
+                let response = PingResponse(request.0);
+                self.send_packet(response)
+                    .context("failed to send a ping response")?;
+                // TODO: Close the connection
+            }
+        }
+        Ok(())
+    }
 }
 
 #[derive(Eq, PartialEq, Hash)]
@@ -200,6 +260,11 @@ impl PartialPacket {
         };
         Ok(next)
     }
+}
+
+pub enum PacketHandleResult {
+    Unhandled,
+    Handled,
 }
 
 pub trait PacketFromServer {

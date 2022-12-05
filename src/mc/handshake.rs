@@ -66,7 +66,7 @@ impl PacketFromClient for LegacyPingRequest {
     }
 }
 
-pub struct LegacyPingResponse(Listing);
+pub struct LegacyPingResponse(pub Listing);
 
 impl LegacyPingResponse {
     pub fn response_string(&self) -> String {

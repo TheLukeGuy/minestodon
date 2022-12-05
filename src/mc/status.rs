@@ -52,7 +52,7 @@ impl PacketFromClient for StatusRequest {
     }
 }
 
-pub struct StatusResponse(Listing);
+pub struct StatusResponse(pub Listing);
 
 impl PacketFromServer for StatusResponse {
     const ID: i32 = 0x00;
@@ -65,7 +65,7 @@ impl PacketFromServer for StatusResponse {
     }
 }
 
-pub struct PingRequest(i64);
+pub struct PingRequest(pub i64);
 
 impl PacketFromClient for PingRequest {
     const ID: i32 = 0x01;
@@ -78,7 +78,7 @@ impl PacketFromClient for PingRequest {
     }
 }
 
-pub struct PingResponse(i64);
+pub struct PingResponse(pub i64);
 
 impl PacketFromServer for PingResponse {
     const ID: i32 = 0x01;
