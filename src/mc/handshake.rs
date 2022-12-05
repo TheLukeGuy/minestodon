@@ -1,4 +1,5 @@
 use crate::mc::packet_io::PacketReadExt;
+use crate::mc::status::Listing;
 use crate::mc::{PacketFromClient, PacketFromServer};
 use crate::packets_from_client;
 use anyhow::{bail, Context, Result};
@@ -65,19 +66,17 @@ impl PacketFromClient for LegacyPingRequest {
     }
 }
 
-pub struct LegacyPingResponse {
-    pub version: i32,
-    pub version_name: String,
-    pub motd: String,
-    pub current_players: i32,
-    pub max_players: i32,
-}
+pub struct LegacyPingResponse(Listing);
 
 impl LegacyPingResponse {
     pub fn response_string(&self) -> String {
         format!(
             "\u{00a7}1\0{}\0{}\0{}\0{}\0{}",
-            self.version, self.version_name, self.motd, self.current_players, self.max_players
+            self.0.version.value,
+            self.0.version.name,
+            self.0.motd,
+            self.0.players.current,
+            self.0.players.max
         )
     }
 }
