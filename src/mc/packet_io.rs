@@ -20,13 +20,13 @@ pub trait PacketReadExt: ReadBytesExt {
             .read_var::<i32>()
             .context("failed to read the string length")?
             .try_into()
-            .context("the received string length doesn't fit in a usize")?;
+            .context("the string length doesn't fit in a usize")?;
 
         let mut bytes = vec![0; len];
         for byte in bytes.iter_mut() {
             *byte = self.read_u8().context("failed to read the next byte")?;
         }
-        String::from_utf8(bytes).context("the received string is not valid UTF-8")
+        String::from_utf8(bytes).context("the string is not valid UTF-8")
     }
 }
 
@@ -76,13 +76,13 @@ pub trait VarInt:
     + BitOrAssign<Self>
     + Shl<usize, Output = Self>
 {
-    const MAX_LEN: usize;
+    const MAX_VAR_LEN: usize;
 
     fn unsigned_shr(self, rhs: usize) -> Self;
 }
 
 impl VarInt for i32 {
-    const MAX_LEN: usize = 5;
+    const MAX_VAR_LEN: usize = 5;
 
     fn unsigned_shr(self, rhs: usize) -> Self {
         (self as u32 >> rhs) as Self
@@ -90,7 +90,7 @@ impl VarInt for i32 {
 }
 
 impl VarInt for i64 {
-    const MAX_LEN: usize = 10;
+    const MAX_VAR_LEN: usize = 10;
 
     fn unsigned_shr(self, rhs: usize) -> Self {
         (self as u64 >> rhs) as Self
@@ -115,10 +115,10 @@ impl<V: VarInt> PartialVarInt<V> {
 
         let last = byte >> 7 == 0;
         if !last {
-            if bytes.len() == V::MAX_LEN {
+            if bytes.len() == V::MAX_VAR_LEN {
                 bail!(
                     "the VarInt is too long; it should be no longer than {} bytes",
-                    V::MAX_LEN
+                    V::MAX_VAR_LEN
                 );
             }
             return Ok(Self::Partial(bytes));
@@ -253,7 +253,7 @@ mod tests {
     #[test]
     fn read_string() -> Result<()> {
         let buf = test_string_bytes()?;
-        let string = (&*buf).read_string()?;
+        let string = (&buf[..]).read_string()?;
         assert_eq!(TEST_STRING, string);
         Ok(())
     }
