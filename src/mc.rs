@@ -1,6 +1,8 @@
-use crate::mc::handshake::{HandshakePacket, LegacyPingResponse, NextState};
 use crate::mc::packet_io::{PacketReadExt, PacketWriteExt, PartialVarInt, VarInt};
-use crate::mc::status::{Listing, PingResponse, StatusPacket, StatusResponse};
+use crate::mc::pre_login::{
+    HandshakePacket, LegacyPingResponse, Listing, NextState, PingResponse, StatusPacket,
+    StatusResponse,
+};
 use anyhow::{Context, Result};
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
@@ -8,9 +10,8 @@ use flate2::Compression;
 use std::io::{Read, Write};
 use std::net::TcpStream;
 
-pub mod handshake;
 pub mod packet_io;
-pub mod status;
+pub mod pre_login;
 
 pub struct Connection {
     pub stream: TcpStream,

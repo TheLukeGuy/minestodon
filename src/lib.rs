@@ -1,4 +1,4 @@
-use crate::mc::status::{Listing, ListingPlayers, ListingVersion};
+use crate::mc::pre_login::{Listing, ListingPlayers, ListingVersion};
 use crate::mc::Connection;
 use anyhow::{Context, Result};
 
