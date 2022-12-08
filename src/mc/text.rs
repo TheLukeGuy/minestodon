@@ -47,6 +47,7 @@ impl Display for Text {
 }
 
 #[derive(Serialize, Deserialize)]
+#[serde(untagged)]
 pub enum TextContent {
     Plain {
         text: String,
