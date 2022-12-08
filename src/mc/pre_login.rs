@@ -129,7 +129,7 @@ impl PacketFromServer for LegacyPingResponse {
         let len = bytes
             .len()
             .try_into()
-            .context("the response length doesn't fit in an i32")?;
+            .context("the response length doesn't fit in a u16")?;
         buf.write_u16::<BigEndian>(len)
             .context("failed to write the response length")?;
         buf.write_all(&bytes)
