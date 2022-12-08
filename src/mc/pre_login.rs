@@ -1,11 +1,11 @@
 use crate::mc::packet_io::{PacketReadExt, PacketWriteExt};
+use crate::mc::text::Text;
 use crate::mc::{PacketFromClient, PacketFromServer};
 use crate::packets_from_client;
 use anyhow::{bail, Context, Result};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use num_enum::TryFromPrimitive;
 use serde::Serialize;
-use serde_json::Value;
 use std::io::{Read, Write};
 use uuid::Uuid;
 
@@ -14,9 +14,9 @@ pub struct Listing {
     pub version: ListingVersion,
     pub players: ListingPlayers,
     #[serde(rename = "description")]
-    pub motd: Value,
-    #[serde(rename = "favicon")]
-    pub icon: String,
+    pub motd: Text,
+    #[serde(rename = "favicon", skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -32,7 +32,8 @@ pub struct ListingPlayers {
     #[serde(rename = "online")]
     pub current: i32,
     pub max: i32,
-    pub sample: Vec<ListingPlayer>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sample: Option<Vec<ListingPlayer>>,
 }
 
 #[derive(Serialize)]

@@ -12,6 +12,7 @@ use std::net::TcpStream;
 
 pub mod packet_io;
 pub mod pre_login;
+pub mod text;
 
 pub struct Connection {
     pub stream: TcpStream,
