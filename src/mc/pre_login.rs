@@ -2,7 +2,7 @@ use crate::mc::packet_io::{PacketReadExt, PacketWriteExt};
 use crate::mc::text::Text;
 use crate::mc::{PacketFromClient, PacketFromServer};
 use crate::packets_from_client;
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use num_enum::TryFromPrimitive;
 use serde::Serialize;
@@ -42,7 +42,7 @@ pub struct ListingPlayer {
     pub id: Uuid,
 }
 
-packets_from_client!(HandshakePacket, "handshake", [Handshake, LegacyPingRequest]);
+packets_from_client!(HandshakePacket, "handshake", [Handshake]);
 
 pub struct Handshake {
     pub version: i32,
@@ -83,60 +83,6 @@ impl PacketFromClient for Handshake {
 pub enum NextState {
     Status = 1,
     Login = 2,
-}
-
-pub struct LegacyPingRequest;
-
-impl PacketFromClient for LegacyPingRequest {
-    const ID: i32 = 0xfe;
-
-    fn read<R: Read>(buf: &mut R) -> Result<Self> {
-        let next_two_bytes = buf
-            .read_u16::<BigEndian>()
-            .context("failed to read the next two bytes")?;
-        if next_two_bytes != 0x01fa {
-            bail!("invalid legacy ping request");
-        }
-        Ok(Self)
-    }
-}
-
-pub struct LegacyPingResponse(pub Listing);
-
-impl LegacyPingResponse {
-    pub fn response_string(&self) -> String {
-        format!(
-            "\u{00a7}1\0{}\0{}\0{}\0{}\0{}",
-            self.0.version.value,
-            self.0.version.name,
-            self.0.motd,
-            self.0.players.current,
-            self.0.players.max
-        )
-    }
-}
-
-impl PacketFromServer for LegacyPingResponse {
-    const ID: i32 = 0xff;
-
-    fn write<W: Write>(&self, buf: &mut W) -> Result<()> {
-        let response = self.response_string();
-        let bytes = response
-            .encode_utf16()
-            .flat_map(u16::to_be_bytes)
-            .collect::<Vec<u8>>();
-
-        let len = bytes
-            .len()
-            .try_into()
-            .context("the response length doesn't fit in a u16")?;
-        buf.write_u16::<BigEndian>(len)
-            .context("failed to write the response length")?;
-        buf.write_all(&bytes)
-            .context("failed to write the response")?;
-
-        Ok(())
-    }
 }
 
 packets_from_client!(StatusPacket, "status", [StatusRequest, PingRequest]);

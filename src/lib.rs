@@ -13,11 +13,11 @@ impl User {
     pub fn tick(&mut self) -> Result<()> {
         let packets = self
             .mc
-            .tick()
+            .tick(test_listing)
             .context("failed to tick the Minecraft connection")?;
         for packet in packets {
             self.mc
-                .handle_pre_play_packet(&packet, test_listing, test_listing)
+                .handle_pre_play_packet(&packet, test_listing)
                 .context("failed to handle a pre-play packet")?;
         }
 

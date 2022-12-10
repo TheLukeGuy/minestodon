@@ -1,9 +1,9 @@
 use crate::mc::packet_io::{PacketReadExt, PacketWriteExt, PartialVarInt, VarInt};
 use crate::mc::pre_login::{
-    HandshakePacket, LegacyPingResponse, Listing, NextState, PingResponse, StatusPacket,
-    StatusResponse,
+    Handshake, HandshakePacket, Listing, NextState, PingResponse, StatusPacket, StatusResponse,
 };
 use anyhow::{Context, Result};
+use byteorder::{BigEndian, WriteBytesExt};
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 use flate2::Compression;
@@ -17,6 +17,7 @@ pub mod text;
 pub struct Connection {
     pub stream: TcpStream,
     packet: Option<PartialPacket>,
+    definitely_modern: bool,
 
     pub state: ConnectionState,
     pub compressed: bool,
@@ -29,12 +30,16 @@ impl Connection {
         Self {
             stream,
             packet: None,
+            definitely_modern: false,
             state: ConnectionState::Handshake,
             compressed: false,
         }
     }
 
-    pub fn tick(&mut self) -> Result<Vec<ReceivedPacket>> {
+    pub fn tick(
+        &mut self,
+        legacy_listing: impl FnOnce() -> Listing,
+    ) -> Result<Vec<ReceivedPacket>> {
         let mut buf = [0; 1024];
         let bytes_read = self
             .stream
@@ -42,7 +47,19 @@ impl Connection {
             .context("failed to receive data from the client")?;
 
         let mut packets = vec![];
-        for &byte in &buf[..bytes_read] {
+        let read = &buf[..bytes_read];
+        for &byte in read {
+            if !self.definitely_modern {
+                if byte == 0xfe {
+                    self.send_legacy_status_response(&read[1..], legacy_listing)
+                        .context("failed to send a legacy status response")?;
+                    // TODO: Close the connection
+                    return Ok(vec![]);
+                } else {
+                    self.definitely_modern = true;
+                }
+            }
+
             let packet = self.packet.take().unwrap_or_else(PartialPacket::new);
             match packet.next(byte)? {
                 PartialPacket::Full(body) => {
@@ -86,10 +103,10 @@ impl Connection {
         let mut data_buf = Vec::with_capacity(1024);
         data_buf
             .write_var(P::ID)
-            .context("failed to write the packet ID to an internal buffer")?;
+            .context("failed to write the packet ID")?;
         packet
             .write(&mut data_buf)
-            .context("failed to write the packet data to an internal buffer")?;
+            .context("failed to write the packet data")?;
 
         let data_len = data_buf
             .len()
@@ -133,15 +150,61 @@ impl Connection {
             .context("failed to send the packet body")
     }
 
+    pub fn send_legacy_status_response(
+        &mut self,
+        request: &[u8],
+        listing: impl FnOnce() -> Listing,
+    ) -> Result<()> {
+        let listing = listing();
+        let response = if request.is_empty() {
+            // <1.4
+            format!(
+                "{}\u{00a7}{}\u{00a7}{}",
+                listing.motd, listing.players.current, listing.players.max
+            )
+        } else {
+            // 1.4-1.6
+            format!(
+                "\u{00a7}1\0{}\0{}\0{}\0{}\0{}",
+                listing.version.value,
+                listing.version.name,
+                listing.motd,
+                listing.players.current,
+                listing.players.max
+            )
+        };
+
+        let bytes = response
+            .encode_utf16()
+            .flat_map(u16::to_be_bytes)
+            .collect::<Vec<u8>>();
+        let len = bytes
+            .len()
+            .try_into()
+            .context("the response length doesn't fit in a u16")?;
+
+        self.stream
+            .write_u8(0xff)
+            .context("failed to send the packet ID")?;
+        self.stream
+            .write_u16::<BigEndian>(len)
+            .context("failed to send the response length")?;
+        self.stream
+            .write_all(&bytes)
+            .context("failed to send the response")?;
+
+        Ok(())
+    }
+
     pub fn handle_pre_play_packet(
         &mut self,
         packet: &ReceivedPacket,
         listing: impl FnOnce() -> Listing,
-        legacy_listing: impl FnOnce() -> Listing,
     ) -> Result<PacketHandleResult> {
         let result = match packet {
             ReceivedPacket::Handshake(packet) => {
-                self.handle_handshake_packet(packet, legacy_listing)?;
+                let HandshakePacket::Handshake(handshake) = packet;
+                self.handle_handshake_packet(handshake)?;
                 PacketHandleResult::Handled
             }
             ReceivedPacket::Status(packet) => {
@@ -153,21 +216,10 @@ impl Connection {
         Ok(result)
     }
 
-    fn handle_handshake_packet(
-        &mut self,
-        packet: &HandshakePacket,
-        legacy_listing: impl FnOnce() -> Listing,
-    ) -> Result<()> {
-        match packet {
-            HandshakePacket::Handshake(handshake) => match handshake.next_state {
-                NextState::Status => self.state = ConnectionState::Status,
-                NextState::Login => self.state = ConnectionState::Login,
-            },
-            HandshakePacket::LegacyPingRequest(_) => {
-                let response = LegacyPingResponse(legacy_listing());
-                self.send_packet(response)
-                    .context("failed to send a legacy ping response")?;
-            }
+    fn handle_handshake_packet(&mut self, handshake: &Handshake) -> Result<()> {
+        match handshake.next_state {
+            NextState::Status => self.state = ConnectionState::Status,
+            NextState::Login => self.state = ConnectionState::Login,
         }
         Ok(())
     }
@@ -286,6 +338,7 @@ macro_rules! packets_from_client {
     ($enum_name:ident, $state_name:expr, [$($packet:ident),* $(,)?] $(,)?) => {
         // This will make IDEs treat $packet values primarily as types rather than enum variants
         // For auto-complete and more intuitive syntax highlighting
+        #[allow(unused_parens)]
         const _: *const ($($packet),*) = ::std::ptr::null();
 
         pub enum $enum_name {
