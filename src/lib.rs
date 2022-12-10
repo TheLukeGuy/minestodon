@@ -10,18 +10,21 @@ pub struct User {
 }
 
 impl User {
-    pub fn tick(&mut self) -> Result<()> {
-        let packets = self
-            .mc
+    pub fn tick(&mut self) -> Result<ShouldClose> {
+        self.mc
             .tick(test_listing)
-            .context("failed to tick the Minecraft connection")?;
-        for packet in packets {
-            self.mc
-                .handle_pre_play_packet(&packet, test_listing)
-                .context("failed to handle a pre-play packet")?;
-        }
+            .context("failed to tick the Minecraft connection")
+    }
+}
 
-        Ok(())
+pub enum ShouldClose {
+    False,
+    True,
+}
+
+impl ShouldClose {
+    pub fn is_true(&self) -> bool {
+        matches!(self, Self::True)
     }
 }
 

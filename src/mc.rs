@@ -1,7 +1,6 @@
 use crate::mc::packet_io::{PacketReadExt, PacketWriteExt, PartialVarInt, VarInt};
-use crate::mc::pre_login::{
-    Handshake, HandshakePacket, Listing, NextState, PingResponse, StatusPacket, StatusResponse,
-};
+use crate::mc::pre_login::Listing;
+use crate::ShouldClose;
 use anyhow::{Context, Result};
 use byteorder::{BigEndian, WriteBytesExt};
 use flate2::read::GzDecoder;
@@ -36,25 +35,20 @@ impl Connection {
         }
     }
 
-    pub fn tick(
-        &mut self,
-        legacy_listing: impl FnOnce() -> Listing,
-    ) -> Result<Vec<ReceivedPacket>> {
+    pub fn tick(&mut self, legacy_listing: impl FnOnce() -> Listing) -> Result<ShouldClose> {
         let mut buf = [0; 1024];
         let bytes_read = self
             .stream
             .read(&mut buf)
             .context("failed to receive data from the client")?;
 
-        let mut packets = vec![];
         let read = &buf[..bytes_read];
         for &byte in read {
             if !self.definitely_modern {
                 if byte == 0xfe {
                     self.send_legacy_status_response(&read[1..], legacy_listing)
                         .context("failed to send a legacy status response")?;
-                    // TODO: Close the connection
-                    return Ok(vec![]);
+                    return Ok(ShouldClose::True);
                 } else {
                     self.definitely_modern = true;
                 }
@@ -87,16 +81,32 @@ impl Connection {
 
                     let mut slice = &body[..];
                     let id = slice.read_var().context("failed to read the packet ID")?;
-                    let decoded = self
-                        .state
-                        .decode_packet(id, &mut slice)
-                        .context("failed to decode the packet")?;
-                    packets.push(decoded);
+                    let close = self
+                        .decode_and_handle_packet(id, &mut slice)
+                        .context("failed to decode and handle the packet")?;
+                    if close.is_true() {
+                        return Ok(ShouldClose::True);
+                    }
                 }
                 partial => self.packet = Some(partial),
             };
         }
-        Ok(packets)
+        Ok(ShouldClose::False)
+    }
+
+    pub fn decode_and_handle_packet(
+        &mut self,
+        id: i32,
+        buf: &mut impl Read,
+    ) -> Result<ShouldClose> {
+        let decoded = match self.state {
+            ConnectionState::Handshake => pre_login::decode_handshake(id, buf),
+            ConnectionState::Status => pre_login::decode_status(id, buf),
+            ConnectionState::Login => todo!(),
+            ConnectionState::Play => todo!(),
+        };
+        let decoded = decoded.context("failed to decode the packet")?;
+        decoded.handle(self).context("failed to handle the packet")
     }
 
     pub fn send_packet<P: PacketFromServer>(&mut self, packet: P) -> Result<()> {
@@ -195,82 +205,12 @@ impl Connection {
 
         Ok(())
     }
-
-    pub fn handle_pre_play_packet(
-        &mut self,
-        packet: &ReceivedPacket,
-        listing: impl FnOnce() -> Listing,
-    ) -> Result<PacketHandleResult> {
-        let result = match packet {
-            ReceivedPacket::Handshake(packet) => {
-                let HandshakePacket::Handshake(handshake) = packet;
-                self.handle_handshake_packet(handshake)?;
-                PacketHandleResult::Handled
-            }
-            ReceivedPacket::Status(packet) => {
-                self.handle_status_packet(packet, listing)?;
-                PacketHandleResult::Handled
-            }
-            _ => PacketHandleResult::Unhandled,
-        };
-        Ok(result)
-    }
-
-    fn handle_handshake_packet(&mut self, handshake: &Handshake) -> Result<()> {
-        match handshake.next_state {
-            NextState::Status => self.state = ConnectionState::Status,
-            NextState::Login => self.state = ConnectionState::Login,
-        }
-        Ok(())
-    }
-
-    fn handle_status_packet(
-        &mut self,
-        packet: &StatusPacket,
-        listing: impl FnOnce() -> Listing,
-    ) -> Result<()> {
-        match packet {
-            StatusPacket::StatusRequest(_) => {
-                let response = StatusResponse(listing());
-                self.send_packet(response)
-                    .context("failed to send a status response")?;
-            }
-            StatusPacket::PingRequest(request) => {
-                let response = PingResponse(request.0);
-                self.send_packet(response)
-                    .context("failed to send a ping response")?;
-                // TODO: Close the connection
-            }
-        }
-        Ok(())
-    }
 }
 
 #[derive(Eq, PartialEq, Hash)]
 pub enum ConnectionState {
     Handshake,
     Status,
-    Login,
-    Play,
-}
-
-impl ConnectionState {
-    pub fn decode_packet(&self, id: i32, buf: &mut impl Read) -> Result<ReceivedPacket> {
-        let packet = match self {
-            ConnectionState::Handshake => {
-                ReceivedPacket::Handshake(HandshakePacket::decode(id, buf)?)
-            }
-            ConnectionState::Status => ReceivedPacket::Status(StatusPacket::decode(id, buf)?),
-            ConnectionState::Login => todo!(),
-            ConnectionState::Play => todo!(),
-        };
-        Ok(packet)
-    }
-}
-
-pub enum ReceivedPacket {
-    Handshake(HandshakePacket),
-    Status(StatusPacket),
     Login,
     Play,
 }
@@ -316,48 +256,39 @@ impl PartialPacket {
     }
 }
 
-pub enum PacketHandleResult {
-    Unhandled,
-    Handled,
-}
-
 pub trait PacketFromServer {
     const ID: i32;
 
     fn write<W: Write>(&self, buf: &mut W) -> Result<()>;
 }
 
-pub trait PacketFromClient: Sized {
-    const ID: i32;
+pub trait PacketFromClient {
+    fn id() -> i32
+    where
+        Self: Sized;
 
-    fn read<R: Read>(buf: &mut R) -> Result<Self>;
+    fn read<R: Read>(buf: &mut R) -> Result<Self>
+    where
+        Self: Sized;
+
+    fn handle(&self, connection: &mut Connection) -> Result<ShouldClose>;
 }
 
 #[macro_export]
 macro_rules! packets_from_client {
-    ($enum_name:ident, $state_name:expr, [$($packet:ident),* $(,)?] $(,)?) => {
-        // This will make IDEs treat $packet values primarily as types rather than enum variants
-        // For auto-complete and more intuitive syntax highlighting
-        #[allow(unused_parens)]
-        const _: *const ($($packet),*) = ::std::ptr::null();
-
-        pub enum $enum_name {
-            $(
-                $packet($packet),
-            )*
-        }
-
-        impl $enum_name {
-            #[allow(unreachable_code, unused_variables)]
-            pub fn decode(id: i32, buf: &mut impl ::std::io::Read) -> ::anyhow::Result<Self> {
-                let packet = match id {
-                    $(
-                        $packet::ID => Self::$packet($packet::read(buf)?),
-                    )*
-                    id => ::anyhow::bail!("invalid {} packet ID {id:#04x}", $state_name),
-                };
-                ::std::result::Result::Ok(packet)
-            }
+    ($fn_name:ident, $state:expr, [$($packet:ident),* $(,)?] $(,)?) => {
+        #[allow(unreachable_code, unused_variables)]
+        pub fn $fn_name(
+            id: i32,
+            buf: &mut impl ::std::io::Read,
+        ) -> ::anyhow::Result<::std::boxed::Box<dyn $crate::mc::PacketFromClient>> {
+            let packet: ::std::boxed::Box<dyn $crate::mc::PacketFromClient> = match id {
+                $(
+                    id if id == $packet::id() => ::std::boxed::Box::new($packet::read(buf)?),
+                )*
+                id => ::anyhow::bail!(::std::concat!("invalid ", $state, " packet ID {:#04x}"), id),
+            };
+            ::std::result::Result::Ok(packet)
         }
     };
 }

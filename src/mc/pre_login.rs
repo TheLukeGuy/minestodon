@@ -1,6 +1,6 @@
 use crate::mc::packet_io::{PacketReadExt, PacketWriteExt};
 use crate::mc::text::Text;
-use crate::mc::{PacketFromClient, PacketFromServer};
+use crate::mc::{Connection, ConnectionState, PacketFromClient, PacketFromServer, ShouldClose};
 use crate::packets_from_client;
 use anyhow::{Context, Result};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
@@ -42,7 +42,7 @@ pub struct ListingPlayer {
     pub id: Uuid,
 }
 
-packets_from_client!(HandshakePacket, "handshake", [Handshake]);
+packets_from_client!(decode_handshake, "handshake", [Handshake]);
 
 pub struct Handshake {
     pub version: i32,
@@ -52,7 +52,9 @@ pub struct Handshake {
 }
 
 impl PacketFromClient for Handshake {
-    const ID: i32 = 0x00;
+    fn id() -> i32 {
+        0x00
+    }
 
     fn read<R: Read>(buf: &mut R) -> Result<Self> {
         let version = buf.read_var().context("failed to read the version")?;
@@ -76,6 +78,14 @@ impl PacketFromClient for Handshake {
         };
         Ok(packet)
     }
+
+    fn handle(&self, connection: &mut Connection) -> Result<ShouldClose> {
+        match self.next_state {
+            NextState::Status => connection.state = ConnectionState::Status,
+            NextState::Login => connection.state = ConnectionState::Login,
+        }
+        Ok(ShouldClose::False)
+    }
 }
 
 #[derive(TryFromPrimitive)]
@@ -85,15 +95,21 @@ pub enum NextState {
     Login = 2,
 }
 
-packets_from_client!(StatusPacket, "status", [StatusRequest, PingRequest]);
+packets_from_client!(decode_status, "status", [StatusRequest, PingRequest]);
 
 pub struct StatusRequest;
 
 impl PacketFromClient for StatusRequest {
-    const ID: i32 = 0x00;
+    fn id() -> i32 {
+        0x00
+    }
 
     fn read<R: Read>(_buf: &mut R) -> Result<Self> {
         Ok(Self)
+    }
+
+    fn handle(&self, _connection: &mut Connection) -> Result<ShouldClose> {
+        todo!()
     }
 }
 
@@ -113,13 +129,23 @@ impl PacketFromServer for StatusResponse {
 pub struct PingRequest(pub i64);
 
 impl PacketFromClient for PingRequest {
-    const ID: i32 = 0x01;
+    fn id() -> i32 {
+        0x01
+    }
 
     fn read<R: Read>(buf: &mut R) -> Result<Self> {
         let payload = buf
             .read_i64::<BigEndian>()
             .context("failed to read the payload")?;
         Ok(Self(payload))
+    }
+
+    fn handle(&self, connection: &mut Connection) -> Result<ShouldClose> {
+        let response = PingResponse(self.0);
+        connection
+            .send_packet(response)
+            .context("failed to send a ping response packet")?;
+        Ok(ShouldClose::True)
     }
 }
 
