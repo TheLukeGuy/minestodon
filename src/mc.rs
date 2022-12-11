@@ -1,11 +1,12 @@
 use crate::mc::packet_io::{PacketReadExt, PacketWriteExt, PartialVarInt, VarInt};
 use crate::mc::pre_login::Listing;
-use crate::ShouldClose;
+use crate::{ServerRef, ShouldClose};
 use anyhow::{Context, Result};
 use byteorder::{BigEndian, WriteBytesExt};
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 use flate2::Compression;
+use log::debug;
 use std::io::{Read, Write};
 use std::net::TcpStream;
 
@@ -18,7 +19,7 @@ pub struct Connection {
     packet: Option<PartialPacket>,
     definitely_modern: bool,
 
-    pub state: ConnectionState,
+    state: ConnectionState,
     pub compressed: bool,
 }
 
@@ -35,7 +36,7 @@ impl Connection {
         }
     }
 
-    pub fn tick(&mut self, legacy_listing: impl FnOnce() -> Listing) -> Result<ShouldClose> {
+    pub fn tick(&mut self, server: &ServerRef) -> Result<ShouldClose> {
         let mut buf = [0; 1024];
         let bytes_read = self
             .stream
@@ -46,7 +47,7 @@ impl Connection {
         for &byte in read {
             if !self.definitely_modern {
                 if byte == 0xfe {
-                    self.send_legacy_status_response(&read[1..], legacy_listing)
+                    self.send_legacy_status_response(&read[1..], server.legacy_listing())
                         .context("failed to send a legacy status response")?;
                     return Ok(ShouldClose::True);
                 } else {
@@ -82,7 +83,7 @@ impl Connection {
                     let mut slice = &body[..];
                     let id = slice.read_var().context("failed to read the packet ID")?;
                     let close = self
-                        .decode_and_handle_packet(id, &mut slice)
+                        .decode_and_handle_packet(id, &mut slice, server)
                         .context("failed to decode and handle the packet")?;
                     if close.is_true() {
                         return Ok(ShouldClose::True);
@@ -98,6 +99,7 @@ impl Connection {
         &mut self,
         id: i32,
         buf: &mut impl Read,
+        server: &ServerRef,
     ) -> Result<ShouldClose> {
         let decoded = match self.state {
             ConnectionState::Handshake => pre_login::decode_handshake(id, buf),
@@ -106,7 +108,9 @@ impl Connection {
             ConnectionState::Play => todo!(),
         };
         let decoded = decoded.context("failed to decode the packet")?;
-        decoded.handle(self).context("failed to handle the packet")
+        decoded
+            .handle(self, server)
+            .context("failed to handle the packet")
     }
 
     pub fn send_packet<P: PacketFromServer>(&mut self, packet: P) -> Result<()> {
@@ -160,20 +164,17 @@ impl Connection {
             .context("failed to send the packet body")
     }
 
-    pub fn send_legacy_status_response(
-        &mut self,
-        request: &[u8],
-        listing: impl FnOnce() -> Listing,
-    ) -> Result<()> {
-        let listing = listing();
+    pub fn send_legacy_status_response(&mut self, request: &[u8], listing: Listing) -> Result<()> {
         let response = if request.is_empty() {
             // <1.4
+            debug!("Sending a legacy (<1.4) status response.");
             format!(
                 "{}\u{00a7}{}\u{00a7}{}",
                 listing.motd, listing.players.current, listing.players.max
             )
         } else {
             // 1.4-1.6
+            debug!("Sending a legacy (1.4-1.6) status response.");
             format!(
                 "\u{00a7}1\0{}\0{}\0{}\0{}\0{}",
                 listing.version.value,
@@ -184,14 +185,15 @@ impl Connection {
             )
         };
 
+        let len = response
+            .chars()
+            .count()
+            .try_into()
+            .context("the response length doesn't fit in a u16")?;
         let bytes = response
             .encode_utf16()
             .flat_map(u16::to_be_bytes)
             .collect::<Vec<u8>>();
-        let len = bytes
-            .len()
-            .try_into()
-            .context("the response length doesn't fit in a u16")?;
 
         self.stream
             .write_u8(0xff)
@@ -205,9 +207,14 @@ impl Connection {
 
         Ok(())
     }
+
+    pub fn set_state(&mut self, state: ConnectionState) {
+        debug!("State change: {:?} -> {state:?}", self.state);
+        self.state = state;
+    }
 }
 
-#[derive(Eq, PartialEq, Hash)]
+#[derive(Eq, PartialEq, Hash, Debug)]
 pub enum ConnectionState {
     Handshake,
     Status,
@@ -271,7 +278,7 @@ pub trait PacketFromClient {
     where
         Self: Sized;
 
-    fn handle(&self, connection: &mut Connection) -> Result<ShouldClose>;
+    fn handle(&self, connection: &mut Connection, server: &ServerRef) -> Result<ShouldClose>;
 }
 
 #[macro_export]
