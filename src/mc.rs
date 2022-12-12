@@ -46,6 +46,9 @@ impl Connection {
             .stream
             .read(&mut buf)
             .context("failed to receive data from the client")?;
+        if bytes_read == 0 {
+            return Ok(ShouldClose::True);
+        }
 
         let read = &buf[..bytes_read];
         for &byte in read {
