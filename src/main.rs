@@ -15,10 +15,11 @@ fn init_logging() -> Result<()> {
     TermLogger::init(
         LevelFilter::Trace,
         ConfigBuilder::new()
-            .set_time_level(LevelFilter::Off)
             .set_thread_level(LevelFilter::Error)
             .set_target_level(LevelFilter::Off)
             .set_thread_mode(ThreadLogMode::Both)
+            .set_time_offset_to_local()
+            .unwrap_or_else(|err| err)
             .build(),
         TerminalMode::Mixed,
         ColorChoice::Auto,
