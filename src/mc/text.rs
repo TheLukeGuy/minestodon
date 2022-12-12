@@ -96,9 +96,9 @@ pub enum TextContent {
 impl Display for TextContent {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            TextContent::Plain { text } => f.write_str(text),
-            TextContent::Translated { key, .. } => f.write_str(key),
-            TextContent::KeyBinding { key } => f.write_str(key),
+            Self::Plain { text } => f.write_str(text),
+            Self::Translated { key, .. } => f.write_str(key),
+            Self::KeyBinding { key } => f.write_str(key),
         }
     }
 }
@@ -169,8 +169,8 @@ pub enum TextColor {
 impl TextColor {
     pub fn legacy_char(&self) -> Result<char> {
         let result = match self {
-            TextColor::Named(named) => named.legacy_char(),
-            TextColor::Hex(hex) => {
+            Self::Named(named) => named.legacy_char(),
+            Self::Hex(hex) => {
                 let rgb = parse_hex(hex).context("failed to parse the hex string")?;
                 let lab = Lab::from_rgb(&rgb);
 

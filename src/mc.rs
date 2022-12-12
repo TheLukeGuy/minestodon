@@ -237,7 +237,7 @@ impl PartialPacket {
 
     pub fn next(self, byte: u8) -> Result<Self> {
         let next = match self {
-            PartialPacket::AwaitingLen(len) => {
+            Self::AwaitingLen(len) => {
                 let next = len
                     .next(byte)
                     .context("received an invalid byte while awaiting the packet length")?;
@@ -251,7 +251,7 @@ impl PartialPacket {
                     partial => Self::AwaitingLen(partial),
                 }
             }
-            PartialPacket::AwaitingBody { len, mut body } => {
+            Self::AwaitingBody { len, mut body } => {
                 body.push(byte);
                 if body.len() == len {
                     Self::Full(body)
