@@ -22,7 +22,12 @@ impl Text {
     }
 
     pub fn push_sequential(self, other: impl Into<Text>) -> Self {
-        Self::Sequential(vec![self, other.into()])
+        if let Self::Sequential(mut text) = self {
+            text.push(other.into());
+            Self::Sequential(text)
+        } else {
+            Self::Sequential(vec![self, other.into()])
+        }
     }
 
     pub fn color(self, color: impl Into<TextColor>) -> Self {
