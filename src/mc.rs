@@ -120,7 +120,7 @@ impl Connection {
     pub fn send_packet<P: PacketFromServer>(&mut self, packet: P) -> Result<()> {
         let mut data_buf = Vec::with_capacity(1024);
         data_buf
-            .write_var(P::ID)
+            .write_var(P::id())
             .context("failed to write the packet ID")?;
         packet
             .write(&mut data_buf)
@@ -270,8 +270,7 @@ impl PartialPacket {
 }
 
 pub trait PacketFromServer {
-    const ID: i32;
-
+    fn id() -> i32;
     fn write<W: Write>(&self, buf: &mut W) -> Result<()>;
 }
 

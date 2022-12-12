@@ -120,7 +120,9 @@ impl PacketFromClient for StatusRequest {
 pub struct StatusResponse(pub Listing);
 
 impl PacketFromServer for StatusResponse {
-    const ID: i32 = 0x00;
+    fn id() -> i32 {
+        0x00
+    }
 
     fn write<W: Write>(&self, buf: &mut W) -> Result<()> {
         let serialized =
@@ -156,7 +158,9 @@ impl PacketFromClient for PingRequest {
 pub struct PingResponse(pub i64);
 
 impl PacketFromServer for PingResponse {
-    const ID: i32 = 0x01;
+    fn id() -> i32 {
+        0x01
+    }
 
     fn write<W: Write>(&self, buf: &mut W) -> Result<()> {
         buf.write_i64::<BigEndian>(self.0)

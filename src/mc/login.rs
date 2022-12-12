@@ -121,7 +121,9 @@ impl Signature {
 pub struct SetCompression(i32);
 
 impl PacketFromServer for SetCompression {
-    const ID: i32 = 0x03;
+    fn id() -> i32 {
+        0x03
+    }
 
     fn write<W: Write>(&self, buf: &mut W) -> Result<()> {
         buf.write_var(self.0)
@@ -136,7 +138,9 @@ pub struct LoginSuccess {
 }
 
 impl PacketFromServer for LoginSuccess {
-    const ID: i32 = 0x02;
+    fn id() -> i32 {
+        0x02
+    }
 
     fn write<W: Write>(&self, buf: &mut W) -> Result<()> {
         buf.write_uuid(&self.uuid)
