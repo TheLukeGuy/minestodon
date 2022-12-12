@@ -9,16 +9,19 @@ use flate2::Compression;
 use log::debug;
 use std::io::{Read, Write};
 use std::net::TcpStream;
+use uuid::Uuid;
 
+pub mod login;
 pub mod packet_io;
 pub mod pre_login;
 pub mod text;
 
 pub struct Connection {
     pub stream: TcpStream,
+    pub uuid: Option<Uuid>,
+
     packet: Option<PartialPacket>,
     definitely_modern: bool,
-
     state: ConnectionState,
     pub compressed: bool,
 }
@@ -29,6 +32,7 @@ impl Connection {
     pub fn new(stream: TcpStream) -> Self {
         Self {
             stream,
+            uuid: None,
             packet: None,
             definitely_modern: false,
             state: ConnectionState::Handshake,
@@ -104,7 +108,7 @@ impl Connection {
         let decoded = match self.state {
             ConnectionState::Handshake => pre_login::decode_handshake(id, buf),
             ConnectionState::Status => pre_login::decode_status(id, buf),
-            ConnectionState::Login => todo!(),
+            ConnectionState::Login => login::decode(id, buf),
             ConnectionState::Play => todo!(),
         };
         let decoded = decoded.context("failed to decode the packet")?;

@@ -1,9 +1,15 @@
 use anyhow::{bail, Context, Result};
-use byteorder::{ReadBytesExt, WriteBytesExt};
+use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use std::num::TryFromIntError;
 use std::ops::{BitAnd, BitOrAssign, Shl};
+use uuid::Uuid;
 
 pub trait PacketReadExt: ReadBytesExt {
+    fn read_bool(&mut self) -> Result<bool> {
+        let byte = self.read_u8().context("failed to read the boolean byte")?;
+        Ok(byte != 0)
+    }
+
     fn read_var<V: VarInt>(&mut self) -> Result<V> {
         let mut partial = PartialVarInt::new();
         loop {
@@ -28,11 +34,27 @@ pub trait PacketReadExt: ReadBytesExt {
         }
         String::from_utf8(bytes).context("the string is not valid UTF-8")
     }
+
+    fn read_uuid(&mut self) -> Result<Uuid> {
+        let high = self
+            .read_u64::<BigEndian>()
+            .context("failed to read the high bits")?;
+        let low = self
+            .read_u64::<BigEndian>()
+            .context("failed to read the low bits")?;
+        Ok(Uuid::from_u64_pair(high, low))
+    }
 }
 
 impl<R: ReadBytesExt> PacketReadExt for R {}
 
 pub trait PacketWriteExt: WriteBytesExt {
+    fn write_bool(&mut self, bool: bool) -> Result<()> {
+        let byte = if bool { 1 } else { 0 };
+        self.write_u8(byte)
+            .context("failed to write the boolean byte")
+    }
+
     fn write_var<V: VarInt>(&mut self, mut var: V) -> Result<()> {
         let zero = V::from(0);
         let segment_bits = V::from(0x7f);
@@ -62,6 +84,14 @@ pub trait PacketWriteExt: WriteBytesExt {
                 .context("failed to write the next byte")?;
         }
         Ok(())
+    }
+
+    fn write_uuid(&mut self, uuid: &Uuid) -> Result<()> {
+        let (high, low) = uuid.as_u64_pair();
+        self.write_u64::<BigEndian>(high)
+            .context("failed to write the high bits")?;
+        self.write_u64::<BigEndian>(low)
+            .context("failed to write the low bits")
     }
 }
 
