@@ -170,7 +170,9 @@ impl Connection {
             debug!("Sending a legacy (<1.4) status response.");
             format!(
                 "{}\u{00a7}{}\u{00a7}{}",
-                listing.motd, listing.players.current, listing.players.max
+                listing.motd.to_plain_text(),
+                listing.players.current,
+                listing.players.max
             )
         } else {
             // 1.4-1.6
@@ -179,7 +181,7 @@ impl Connection {
                 "\u{00a7}1\0{}\0{}\0{}\0{}\0{}",
                 listing.version.value,
                 listing.version.name,
-                listing.motd,
+                listing.motd.to_legacy_text(),
                 listing.players.current,
                 listing.players.max
             )

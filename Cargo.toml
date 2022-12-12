@@ -6,7 +6,9 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.66"
 byteorder = "1.4.3"
+enum-iterator = "1.2.0"
 flate2 = "1.0.25"
+lab = "0.11.0"
 log = "0.4.17"
 num_enum = "0.5.7"
 serde = { version = "1.0.149", features = ["derive"] }

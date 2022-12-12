@@ -1,7 +1,10 @@
+use anyhow::{Context, Result};
+use enum_iterator::Sequence;
+use lab::Lab;
 use serde::{Deserialize, Serialize};
 use serde_json::Number;
 use std::fmt;
-use std::fmt::{Display, Formatter};
+use std::fmt::{Display, Formatter, Write};
 
 #[derive(Serialize, Deserialize)]
 #[serde(untagged)]
@@ -21,27 +24,53 @@ pub enum Text {
     },
 }
 
-impl Display for Text {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+impl Text {
+    pub fn to_plain_text(&self) -> String {
         match self {
-            Text::String(string) => f.write_str(string),
-            Text::Bool(bool) => write!(f, "{bool}"),
-            Text::Number(number) => write!(f, "{number}"),
-            Text::Sequential(text) => {
+            Self::String(string) => string.clone(),
+            Self::Bool(bool) => bool.to_string(),
+            Self::Number(number) => number.to_string(),
+            Self::Sequential(text) => {
+                let mut plain = String::new();
                 for text in text {
-                    write!(f, "{text}")?;
+                    plain.push_str(&text.to_plain_text());
                 }
-                Ok(())
+                plain
             }
-            Text::Full {
+            Self::Full {
                 content, children, ..
             } => {
-                write!(f, "{content}")?;
+                let mut plain = content.to_string();
                 for child in children {
-                    write!(f, "{child}")?;
+                    plain.push_str(&child.to_plain_text());
                 }
-                Ok(())
+                plain
             }
+        }
+    }
+
+    pub fn to_legacy_text(&self) -> String {
+        match self {
+            Self::Sequential(text) => {
+                let mut legacy = String::new();
+                for text in text {
+                    legacy.push_str(&text.to_legacy_text());
+                }
+                legacy
+            }
+            Self::Full {
+                content,
+                children,
+                formatting,
+            } => {
+                let mut legacy = formatting.legacy_codes();
+                legacy.push_str(&content.to_string());
+                for child in children {
+                    legacy.push_str(&child.to_legacy_text());
+                }
+                legacy
+            }
+            _ => self.to_plain_text(),
         }
     }
 }
@@ -100,6 +129,36 @@ pub struct TextFormatting {
     pub obfuscated: Option<bool>,
 }
 
+impl TextFormatting {
+    pub fn legacy_codes(&self) -> String {
+        const ESCAPE_CHAR: char = '\u{00a7}';
+
+        let mut codes = String::with_capacity(2 * 6);
+        if let Some(color) = &self.color {
+            let legacy = color
+                .legacy_char()
+                .unwrap_or_else(|_| NamedTextColor::Reset.legacy_char());
+            write!(codes, "{ESCAPE_CHAR}{legacy}").unwrap();
+        }
+        if let Some(true) = self.bolded {
+            write!(codes, "{ESCAPE_CHAR}l").unwrap();
+        }
+        if let Some(true) = self.italicized {
+            write!(codes, "{ESCAPE_CHAR}o").unwrap();
+        }
+        if let Some(true) = self.underlined {
+            write!(codes, "{ESCAPE_CHAR}n").unwrap();
+        }
+        if let Some(true) = self.struck_through {
+            write!(codes, "{ESCAPE_CHAR}m").unwrap();
+        }
+        if let Some(true) = self.obfuscated {
+            write!(codes, "{ESCAPE_CHAR}k").unwrap();
+        }
+        codes
+    }
+}
+
 #[derive(Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum TextColor {
@@ -107,7 +166,40 @@ pub enum TextColor {
     Hex(String),
 }
 
-#[derive(Serialize, Deserialize)]
+impl TextColor {
+    pub fn legacy_char(&self) -> Result<char> {
+        let result = match self {
+            TextColor::Named(named) => named.legacy_char(),
+            TextColor::Hex(hex) => {
+                let rgb = parse_hex(hex).context("failed to parse the hex string")?;
+                let lab = Lab::from_rgb(&rgb);
+
+                let mut closest = None;
+                let mut closest_distance = f32::MAX;
+                for color in enum_iterator::all::<NamedTextColor>() {
+                    let try_lab = Lab::from_rgb(&color.vanilla());
+                    let distance = try_lab.squared_distance(&lab);
+                    if distance < closest_distance {
+                        closest = Some(color);
+                        closest_distance = distance;
+                    }
+                }
+                closest.unwrap().legacy_char()
+            }
+        };
+        Ok(result)
+    }
+}
+
+fn parse_hex(hex: &str) -> Result<[u8; 3]> {
+    let hex = hex.trim_start_matches('#');
+    let red = u8::from_str_radix(&hex[0..2], 16).context("failed to parse the red value")?;
+    let green = u8::from_str_radix(&hex[2..4], 16).context("failed to parse the green value")?;
+    let blue = u8::from_str_radix(&hex[4..6], 16).context("failed to parse the blue value")?;
+    Ok([red, green, blue])
+}
+
+#[derive(Serialize, Deserialize, Sequence)]
 #[serde(rename_all = "snake_case")]
 pub enum NamedTextColor {
     Black,
@@ -127,6 +219,52 @@ pub enum NamedTextColor {
     Yellow,
     White,
     Reset,
+}
+
+impl NamedTextColor {
+    pub fn legacy_char(&self) -> char {
+        match self {
+            Self::Black => '0',
+            Self::DarkBlue => '1',
+            Self::DarkGreen => '2',
+            Self::DarkAqua => '3',
+            Self::DarkRed => '4',
+            Self::DarkPurple => '5',
+            Self::Gold => '6',
+            Self::Gray => '7',
+            Self::DarkGray => '8',
+            Self::Blue => '9',
+            Self::Green => 'a',
+            Self::Aqua => 'b',
+            Self::Red => 'c',
+            Self::LightPurple => 'd',
+            Self::Yellow => 'e',
+            Self::White => 'f',
+            Self::Reset => 'r',
+        }
+    }
+
+    pub fn vanilla(&self) -> [u8; 3] {
+        match self {
+            Self::Black => [0, 0, 0],
+            Self::DarkBlue => [0, 0, 170],
+            Self::DarkGreen => [0, 170, 0],
+            Self::DarkAqua => [0, 170, 170],
+            Self::DarkRed => [170, 0, 0],
+            Self::DarkPurple => [170, 0, 170],
+            Self::Gold => [255, 170, 0],
+            Self::Gray => [170, 170, 170],
+            Self::DarkGray => [85, 85, 85],
+            Self::Blue => [85, 85, 255],
+            Self::Green => [85, 255, 85],
+            Self::Aqua => [85, 255, 255],
+            Self::Red => [255, 85, 85],
+            Self::LightPurple => [255, 85, 255],
+            Self::Yellow => [255, 255, 85],
+            Self::White => [255, 255, 255],
+            Self::Reset => [255, 255, 255],
+        }
+    }
 }
 
 impl From<NamedTextColor> for TextColor {

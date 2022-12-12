@@ -74,7 +74,7 @@ impl ServerRef {
                 formatting: TextFormatting {
                     color: Some(TextColor::Hex("#6364ff".into())),
                     font: None,
-                    bolded: None,
+                    bolded: Some(true),
                     italicized: None,
                     underlined: None,
                     struck_through: None,
