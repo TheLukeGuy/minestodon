@@ -13,18 +13,62 @@ pub enum Text {
     Bool(bool),
     Number(Number),
     Sequential(Vec<Self>),
-    Full {
-        #[serde(flatten)]
-        content: TextContent,
-        #[serde(rename = "extra", default, skip_serializing_if = "Vec::is_empty")]
-        children: Vec<Self>,
-        #[serde(flatten)]
-        formatting: TextFormatting,
-        // TODO: interactivity
-    },
+    Full(FullText),
 }
 
 impl Text {
+    pub fn push_child(self, child: impl Into<Text>) -> Self {
+        self.modify_as_full(|full| full.children.push(child.into()))
+    }
+
+    pub fn push_sequential(self, other: impl Into<Text>) -> Self {
+        Self::Sequential(vec![self, other.into()])
+    }
+
+    pub fn color(self, color: impl Into<TextColor>) -> Self {
+        self.modify_as_full(|full| full.formatting.color = Some(color.into()))
+    }
+
+    pub fn font(self, font: TextFont) -> Self {
+        self.modify_as_full(|full| full.formatting.font = Some(font))
+    }
+
+    pub fn bolded(self, bolded: bool) -> Self {
+        self.modify_as_full(|full| full.formatting.bolded = Some(bolded))
+    }
+
+    pub fn italicized(self, italicized: bool) -> Self {
+        self.modify_as_full(|full| full.formatting.italicized = Some(italicized))
+    }
+
+    pub fn underlined(self, underlined: bool) -> Self {
+        self.modify_as_full(|full| full.formatting.underlined = Some(underlined))
+    }
+
+    pub fn struck_through(self, struck_through: bool) -> Self {
+        self.modify_as_full(|full| full.formatting.struck_through = Some(struck_through))
+    }
+
+    pub fn obfuscated(self, obfuscated: bool) -> Self {
+        self.modify_as_full(|full| full.formatting.obfuscated = Some(obfuscated))
+    }
+
+    fn modify_as_full(self, modify: impl FnOnce(&mut FullText)) -> Self {
+        let mut full = match self {
+            Text::Full(full) => full,
+            Text::String(string) => string.into(),
+            Text::Bool(bool) => bool.into(),
+            Text::Number(number) => number.into(),
+            Text::Sequential(children) => FullText {
+                content: Default::default(),
+                children,
+                formatting: Default::default(),
+            },
+        };
+        modify(&mut full);
+        Self::Full(full)
+    }
+
     pub fn to_plain_text(&self) -> String {
         match self {
             Self::String(string) => string.clone(),
@@ -37,11 +81,9 @@ impl Text {
                 }
                 plain
             }
-            Self::Full {
-                content, children, ..
-            } => {
-                let mut plain = content.to_string();
-                for child in children {
+            Self::Full(full) => {
+                let mut plain = full.content.to_string();
+                for child in &full.children {
                     plain.push_str(&child.to_plain_text());
                 }
                 plain
@@ -58,19 +100,44 @@ impl Text {
                 }
                 legacy
             }
-            Self::Full {
-                content,
-                children,
-                formatting,
-            } => {
-                let mut legacy = formatting.legacy_codes();
-                legacy.push_str(&content.to_string());
-                for child in children {
+            Self::Full(full) => {
+                let mut legacy = full.formatting.legacy_codes();
+                legacy.push_str(&full.content.to_string());
+                for child in &full.children {
                     legacy.push_str(&child.to_legacy_text());
                 }
                 legacy
             }
             _ => self.to_plain_text(),
+        }
+    }
+}
+
+impl<D: Display> From<D> for Text {
+    fn from(display: D) -> Self {
+        Self::String(display.to_string())
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct FullText {
+    #[serde(flatten)]
+    content: TextContent,
+    #[serde(rename = "extra", default, skip_serializing_if = "Vec::is_empty")]
+    children: Vec<Text>,
+    #[serde(flatten)]
+    formatting: TextFormatting,
+    // TODO: interactivity
+}
+
+impl<D: Display> From<D> for FullText {
+    fn from(display: D) -> Self {
+        Self {
+            content: TextContent::Plain {
+                text: display.to_string(),
+            },
+            children: vec![],
+            formatting: Default::default(),
         }
     }
 }
@@ -93,6 +160,14 @@ pub enum TextContent {
     },
 }
 
+impl Default for TextContent {
+    fn default() -> Self {
+        Self::Plain {
+            text: String::new(),
+        }
+    }
+}
+
 impl Display for TextContent {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
@@ -103,7 +178,7 @@ impl Display for TextContent {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Default, Serialize, Deserialize)]
 pub struct TextFormatting {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub color: Option<TextColor>,
@@ -270,6 +345,14 @@ impl NamedTextColor {
 impl From<NamedTextColor> for TextColor {
     fn from(named: NamedTextColor) -> Self {
         Self::Named(named)
+    }
+}
+
+pub struct HexTextColor<D: Display>(pub D);
+
+impl<D: Display> From<HexTextColor<D>> for TextColor {
+    fn from(hex: HexTextColor<D>) -> Self {
+        Self::Hex(hex.0.to_string())
     }
 }
 

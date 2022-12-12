@@ -1,5 +1,5 @@
 use crate::mc::pre_login::{Listing, ListingPlayers, ListingVersion};
-use crate::mc::text::{Text, TextColor, TextContent, TextFormatting};
+use crate::mc::text::{HexTextColor, Text};
 use crate::mc::Connection;
 use anyhow::{Context, Result};
 use log::{debug, error, info};
@@ -66,21 +66,9 @@ impl ServerRef {
                 max: 1,
                 sample: None,
             },
-            motd: Text::Full {
-                content: TextContent::Plain {
-                    text: "Minestodon!".into(),
-                },
-                children: vec![],
-                formatting: TextFormatting {
-                    color: Some(TextColor::Hex("#6364ff".into())),
-                    font: None,
-                    bolded: Some(true),
-                    italicized: None,
-                    underlined: None,
-                    struck_through: None,
-                    obfuscated: None,
-                },
-            },
+            motd: Text::from("Minestodon!")
+                .color(HexTextColor("#6364ff"))
+                .bolded(true),
             icon: None,
         }
     }
