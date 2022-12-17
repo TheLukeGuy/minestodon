@@ -65,9 +65,9 @@ impl Text {
             Text::Bool(bool) => bool.into(),
             Text::Number(number) => number.into(),
             Text::Sequential(children) => FullText {
-                content: Default::default(),
+                content: TextContent::default(),
                 children,
-                formatting: Default::default(),
+                formatting: TextFormatting::default(),
             },
         };
         modify(&mut full);
@@ -142,7 +142,7 @@ impl<D: Display> From<D> for FullText {
                 text: display.to_string(),
             },
             children: vec![],
-            formatting: Default::default(),
+            formatting: TextFormatting::default(),
         }
     }
 }
