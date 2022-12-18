@@ -58,8 +58,7 @@ impl<R: ReadBytesExt> PacketReadExt for R {}
 
 pub trait PacketWriteExt: WriteBytesExt {
     fn write_bool(&mut self, bool: bool) -> Result<()> {
-        let byte = if bool { 1 } else { 0 };
-        self.write_u8(byte)
+        self.write_u8(bool.into())
             .context("failed to write the boolean byte")
     }
 
