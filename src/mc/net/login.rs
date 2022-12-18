@@ -1,6 +1,6 @@
-use crate::mc::packet_io::{PacketReadExt, PacketWriteExt};
+use crate::mc::net::packet_io::{PacketReadExt, PacketWriteExt};
+use crate::mc::net::{Connection, ConnectionState, PacketFromClient, PacketFromServer};
 use crate::mc::text::Text;
-use crate::mc::{Connection, ConnectionState, PacketFromClient, PacketFromServer};
 use crate::packets_from_client;
 use crate::server::{ServerRef, ShouldClose};
 use anyhow::{Context, Result};

@@ -1,6 +1,6 @@
-use crate::mc::pre_login::{Listing, ListingPlayers, ListingVersion};
+use crate::mc::net::pre_login::{Listing, ListingPlayers, ListingVersion};
+use crate::mc::net::Connection;
 use crate::mc::text::{HexTextColor, Text};
-use crate::mc::Connection;
 use anyhow::{Context, Result};
 use log::{debug, error, info, warn};
 use std::net::{TcpListener, TcpStream};
