@@ -60,8 +60,8 @@ impl ServerRef {
     pub fn listing(&self) -> Listing {
         Listing {
             version: ListingVersion {
-                value: 760,
-                name: "Minestodon 1.19.2".into(),
+                value: 761,
+                name: "Minestodon 1.19.3".into(),
             },
             players: ListingPlayers {
                 current: 0,
