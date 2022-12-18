@@ -2,7 +2,7 @@ use crate::mc::login::LoginDisconnect;
 use crate::mc::packet_io::{PacketReadExt, PacketWriteExt, PartialVarInt, VarInt};
 use crate::mc::pre_login::Listing;
 use crate::mc::text::{NamedTextColor, Text};
-use crate::{ServerRef, ShouldClose};
+use crate::server::{ServerRef, ShouldClose};
 use anyhow::{bail, Context, Result};
 use byteorder::{BigEndian, WriteBytesExt};
 use flate2::read::GzDecoder;

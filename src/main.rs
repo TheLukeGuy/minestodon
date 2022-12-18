@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use log::LevelFilter;
-use minestodon::Server;
+use minestodon::server::Server;
 use simplelog::{ColorChoice, ConfigBuilder, TermLogger, TerminalMode, ThreadLogMode};
 
 fn main() -> Result<()> {

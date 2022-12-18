@@ -1,7 +1,8 @@
 use crate::mc::packet_io::{PacketReadExt, PacketWriteExt};
 use crate::mc::text::Text;
 use crate::mc::{Connection, ConnectionState, PacketFromClient, PacketFromServer};
-use crate::{packets_from_client, ServerRef, ShouldClose};
+use crate::packets_from_client;
+use crate::server::{ServerRef, ShouldClose};
 use anyhow::{Context, Result};
 use log::info;
 use std::io::{Read, Write};
