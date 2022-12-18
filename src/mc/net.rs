@@ -6,8 +6,8 @@ use crate::server::{Server, ShouldClose};
 use crate::text;
 use anyhow::{bail, Context, Result};
 use byteorder::{BigEndian, WriteBytesExt};
-use flate2::read::GzDecoder;
-use flate2::write::GzEncoder;
+use flate2::read::ZlibDecoder;
+use flate2::write::ZlibEncoder;
 use flate2::Compression;
 use log::debug;
 use std::fmt::Debug;
@@ -78,7 +78,7 @@ impl Connection {
                             .context("the uncompressed packet length doesn't fit in a usize")?;
 
                         if len != 0 {
-                            let mut decoder = GzDecoder::new(slice);
+                            let mut decoder = ZlibDecoder::new(slice);
                             let mut data = vec![0; len];
                             decoder
                                 .read_exact(&mut data)
@@ -142,7 +142,7 @@ impl Connection {
                 buf.write_var(data_len)
                     .context("failed to write the uncompressed packet length")?;
 
-                let mut encoder = GzEncoder::new(buf, Compression::default());
+                let mut encoder = ZlibEncoder::new(buf, Compression::default());
                 encoder
                     .write_all(&data_buf)
                     .context("failed to encode and write the packet data")?;
