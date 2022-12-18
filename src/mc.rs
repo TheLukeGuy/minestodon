@@ -92,9 +92,7 @@ impl Connection {
 
                     let mut slice = &body[..];
                     let id = slice.read_var().context("failed to read the packet ID")?;
-                    let close = self
-                        .decode_and_handle_packet(id, &mut slice, server)
-                        .context("failed to decode and handle the packet")?;
+                    let close = self.decode_and_handle_packet(id, &mut slice, server)?;
                     if close.is_true() {
                         return Ok(ShouldClose::True);
                     }
@@ -234,10 +232,15 @@ impl Connection {
     }
 
     pub fn send_error_kick(&mut self, error: impl Debug) -> Result<()> {
+        let error = format!("{error:?}")
+            .lines()
+            .map(str::trim)
+            .collect::<Vec<_>>()
+            .join("\n");
         let reason = Text::from("Minestodon Error\n\n")
             .color(NamedTextColor::Red)
             .underlined(true)
-            .push_sequential(Text::from(format!("{error:?}")).color(NamedTextColor::Gray))
+            .push_sequential(Text::from(error).color(NamedTextColor::Gray))
             .push_sequential(
                 Text::from(format!(
                     "\n\nThis is probably not your fault! Please report it here:\n{}",
