@@ -3,6 +3,7 @@ use crate::mc::packet_io::{PacketReadExt, PacketWriteExt, PartialVarInt, VarInt}
 use crate::mc::pre_login::Listing;
 use crate::mc::text::{NamedTextColor, Text};
 use crate::server::{ServerRef, ShouldClose};
+use crate::text;
 use anyhow::{bail, Context, Result};
 use byteorder::{BigEndian, WriteBytesExt};
 use flate2::read::GzDecoder;
@@ -242,10 +243,10 @@ impl Connection {
             .underlined(true)
             .push_sequential(Text::from(error).color(NamedTextColor::Gray))
             .push_sequential(
-                Text::from(format!(
+                text!(
                     "\n\nThis is probably not your fault! Please report it here:\n{}",
                     crate::ISSUE_URL
-                ))
+                )
                 .color(NamedTextColor::Gold),
             );
         self.send_kick(reason)
