@@ -1,6 +1,9 @@
 use crate::mc::text::{JsonStringType, Text};
+use crate::mc::world::BlockPos;
+use crate::mc::Identifier;
 use anyhow::{bail, Context, Result};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use serde::{Deserialize, Serialize};
 use std::num::TryFromIntError;
 use std::ops::{BitAnd, BitOrAssign, Shl};
 use uuid::Uuid;
@@ -41,6 +44,30 @@ pub trait PacketReadExt: ReadBytesExt {
             .read_string()
             .context("failed to read the text component as a string")?;
         serde_json::from_str(&string).context("failed to deserialize the text component")
+    }
+
+    fn read_identifier(&mut self) -> Result<Identifier> {
+        let string = self
+            .read_string()
+            .context("failed to read the identifier as a string")?;
+        Identifier::parse(&string).context("failed to parse the identifier")
+    }
+
+    fn read_nbt<'de, D>(&mut self) -> Result<D>
+    where
+        D: Deserialize<'de>,
+    {
+        fastnbt::from_reader(self).context("failed to read and deserialize the NBT value")
+    }
+
+    fn read_block_pos(&mut self) -> Result<BlockPos> {
+        let encoded = self
+            .read_u64::<BigEndian>()
+            .context("failed to read the block position as a u64")?;
+        let x = (encoded >> 38) as i32;
+        let y = (encoded << 52 >> 52) as i32;
+        let z = (encoded << 26 >> 38) as i32;
+        Ok(BlockPos { x, y, z })
     }
 
     fn read_uuid(&mut self) -> Result<Uuid> {
@@ -95,10 +122,27 @@ pub trait PacketWriteExt: WriteBytesExt {
 
     fn write_text(&mut self, text: &Text) -> Result<()> {
         let string = text
-            .to_json_string(JsonStringType::Pretty)
+            .to_json_string(JsonStringType::Short)
             .context("failed to serialize the text component")?;
         self.write_str(&string)
             .context("failed to write the text component as a string")
+    }
+
+    fn write_identifier(&mut self, identifier: &Identifier) -> Result<()> {
+        self.write_str(&identifier.to_string())
+            .context("failed to write the identifier as a string")
+    }
+
+    fn write_nbt(&mut self, value: &impl Serialize) -> Result<()> {
+        fastnbt::to_writer(self, value).context("failed to serialize and write the NBT value")
+    }
+
+    fn write_block_pos(&mut self, pos: &BlockPos) -> Result<()> {
+        let x = ((pos.x & 0x3ffffff) as u64) << 38;
+        let z = ((pos.z & 0x3ffffff) as u64) << 12;
+        let y = (pos.y & 0xfff) as u64;
+        self.write_u64::<BigEndian>(x | z | y)
+            .context("failed to write the block position as a u64")
     }
 
     fn write_uuid(&mut self, uuid: &Uuid) -> Result<()> {

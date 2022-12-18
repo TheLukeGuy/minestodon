@@ -2,7 +2,7 @@ use crate::mc::net::packet_io::{PacketReadExt, PacketWriteExt};
 use crate::mc::net::{Connection, ConnectionState, PacketFromClient, PacketFromServer};
 use crate::mc::text::Text;
 use crate::packets_from_client;
-use crate::server::{ServerRef, ShouldClose};
+use crate::server::{Server, ShouldClose};
 use anyhow::{Context, Result};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use num_enum::TryFromPrimitive;
@@ -80,7 +80,7 @@ impl PacketFromClient for Handshake {
         Ok(packet)
     }
 
-    fn handle(&self, connection: &mut Connection, _server: &ServerRef) -> Result<ShouldClose> {
+    fn handle(&self, connection: &mut Connection, _server: &Server) -> Result<ShouldClose> {
         match self.next_state {
             NextState::Status => connection.set_state(ConnectionState::Status),
             NextState::Login => connection.set_state(ConnectionState::Login),
@@ -109,7 +109,7 @@ impl PacketFromClient for StatusRequest {
         Ok(Self)
     }
 
-    fn handle(&self, connection: &mut Connection, server: &ServerRef) -> Result<ShouldClose> {
+    fn handle(&self, connection: &mut Connection, server: &Server) -> Result<ShouldClose> {
         let response = StatusResponse(server.listing());
         connection
             .send_packet(response)
@@ -147,7 +147,7 @@ impl PacketFromClient for PingRequest {
         Ok(Self(payload))
     }
 
-    fn handle(&self, connection: &mut Connection, _server: &ServerRef) -> Result<ShouldClose> {
+    fn handle(&self, connection: &mut Connection, _server: &Server) -> Result<ShouldClose> {
         let response = PingResponse(self.0);
         connection
             .send_packet(response)

@@ -1,8 +1,8 @@
 use crate::mc::net::packet_io::{PacketReadExt, PacketWriteExt};
-use crate::mc::net::{Connection, ConnectionState, PacketFromClient, PacketFromServer};
+use crate::mc::net::{play, Connection, ConnectionState, PacketFromClient, PacketFromServer};
 use crate::mc::text::Text;
 use crate::packets_from_client;
-use crate::server::{ServerRef, ShouldClose};
+use crate::server::{Server, ShouldClose};
 use anyhow::{Context, Result};
 use log::info;
 use std::io::{Read, Write};
@@ -40,7 +40,7 @@ impl PacketFromClient for LoginStart {
         Ok(packet)
     }
 
-    fn handle(&self, connection: &mut Connection, _server: &ServerRef) -> Result<ShouldClose> {
+    fn handle(&self, connection: &mut Connection, server: &Server) -> Result<ShouldClose> {
         let uuid = Uuid::new_v4();
         info!("Assigning UUID {uuid} to player {}.", self.name);
         connection.uuid = Some(uuid);
@@ -61,6 +61,7 @@ impl PacketFromClient for LoginStart {
             .context("failed to send the login success packet")?;
 
         connection.set_state(ConnectionState::Play);
+        play::init_play(connection, server).context("failed to initialize play")?;
         Ok(ShouldClose::False)
     }
 }

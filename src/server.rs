@@ -4,11 +4,14 @@ use crate::mc::text::{HexTextColor, Text};
 use anyhow::{Context, Result};
 use log::{debug, error, info, warn};
 use std::net::{TcpListener, TcpStream};
-use std::sync::{Arc, RwLock, RwLockReadGuard};
+use std::sync::{Arc, RwLock};
 use std::thread;
 
-pub struct Server {
+pub struct Server(Arc<ServerInner>);
+
+struct ServerInner {
     listener: TcpListener,
+    next_entity_id: RwLock<i32>,
 }
 
 impl Server {
@@ -17,18 +20,13 @@ impl Server {
             .with_context(|| format!("failed to bind a new TCP listener to {addr}"))?;
 
         info!("Bound a new server to {addr}!");
-        Ok(Self { listener })
+        let inner = ServerInner {
+            listener,
+            next_entity_id: RwLock::new(0),
+        };
+        Ok(Self(Arc::new(inner)))
     }
 
-    pub fn run(self) {
-        let rc = Arc::new(RwLock::new(self));
-        ServerRef(rc).run();
-    }
-}
-
-pub struct ServerRef(Arc<RwLock<Server>>);
-
-impl ServerRef {
     pub fn run(&self) {
         loop {
             if let Err(err) = self.tick() {
@@ -39,7 +37,7 @@ impl ServerRef {
 
     fn tick(&self) -> Result<()> {
         let (stream, addr) = self
-            .read_lock()
+            .0
             .listener
             .accept()
             .context("failed to accept the incoming connection")?;
@@ -75,26 +73,27 @@ impl ServerRef {
         self.listing()
     }
 
-    fn read_lock(&self) -> RwLockReadGuard<Server> {
-        self.0
-            .read()
-            .expect("failed to acquire the server lock with read access")
+    pub fn next_entity_id(&self) -> i32 {
+        let mut locked = self.0.next_entity_id.write().unwrap();
+        let next = *locked;
+        *locked += 1;
+        next
     }
 }
 
-impl Clone for ServerRef {
+impl Clone for Server {
     fn clone(&self) -> Self {
         Self(Arc::clone(&self.0))
     }
 }
 
 pub struct User {
-    pub server: ServerRef,
+    pub server: Server,
     pub connection: Connection,
 }
 
 impl User {
-    pub fn new(server: ServerRef, stream: TcpStream) -> Self {
+    pub fn new(server: Server, stream: TcpStream) -> Self {
         Self {
             server,
             connection: Connection::new(stream),

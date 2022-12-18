@@ -2,7 +2,7 @@ use crate::mc::net::login::LoginDisconnect;
 use crate::mc::net::packet_io::{PacketReadExt, PacketWriteExt, PartialVarInt, VarInt};
 use crate::mc::net::pre_login::Listing;
 use crate::mc::text::{NamedTextColor, Text};
-use crate::server::{ServerRef, ShouldClose};
+use crate::server::{Server, ShouldClose};
 use crate::text;
 use anyhow::{bail, Context, Result};
 use byteorder::{BigEndian, WriteBytesExt};
@@ -17,6 +17,7 @@ use uuid::Uuid;
 
 pub mod login;
 pub mod packet_io;
+pub mod play;
 pub mod pre_login;
 
 pub struct Connection {
@@ -43,7 +44,7 @@ impl Connection {
         }
     }
 
-    pub fn tick(&mut self, server: &ServerRef) -> Result<ShouldClose> {
+    pub fn tick(&mut self, server: &Server) -> Result<ShouldClose> {
         let mut buf = [0; 1024];
         let bytes_read = self
             .stream
@@ -107,7 +108,7 @@ impl Connection {
         &mut self,
         id: i32,
         buf: &mut impl Read,
-        server: &ServerRef,
+        server: &Server,
     ) -> Result<ShouldClose> {
         let decoded = match self.state {
             ConnectionState::Handshake => pre_login::decode_handshake(id, buf),
@@ -320,7 +321,7 @@ pub trait PacketFromClient {
     where
         Self: Sized;
 
-    fn handle(&self, connection: &mut Connection, server: &ServerRef) -> Result<ShouldClose>;
+    fn handle(&self, connection: &mut Connection, server: &Server) -> Result<ShouldClose>;
 }
 
 #[macro_export]
