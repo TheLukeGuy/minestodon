@@ -26,7 +26,7 @@ impl Text {
             text.push(other.into());
             Self::Sequential(text)
         } else {
-            Self::Sequential(vec![self, other.into()])
+            Self::Sequential(vec!["".into(), self, other.into()])
         }
     }
 
@@ -74,7 +74,7 @@ impl Text {
         Self::Full(full)
     }
 
-    pub fn to_plain_text(&self) -> String {
+    pub fn to_plain_string(&self) -> String {
         match self {
             Self::String(string) => string.clone(),
             Self::Bool(bool) => bool.to_string(),
@@ -82,26 +82,26 @@ impl Text {
             Self::Sequential(text) => {
                 let mut plain = String::new();
                 for text in text {
-                    plain.push_str(&text.to_plain_text());
+                    plain.push_str(&text.to_plain_string());
                 }
                 plain
             }
             Self::Full(full) => {
                 let mut plain = full.content.to_string();
                 for child in &full.children {
-                    plain.push_str(&child.to_plain_text());
+                    plain.push_str(&child.to_plain_string());
                 }
                 plain
             }
         }
     }
 
-    pub fn to_legacy_text(&self) -> String {
+    pub fn to_legacy_string(&self) -> String {
         match self {
             Self::Sequential(text) => {
                 let mut legacy = String::new();
                 for text in text {
-                    legacy.push_str(&text.to_legacy_text());
+                    legacy.push_str(&text.to_legacy_string());
                 }
                 legacy
             }
@@ -109,12 +109,20 @@ impl Text {
                 let mut legacy = full.formatting.legacy_codes();
                 legacy.push_str(&full.content.to_string());
                 for child in &full.children {
-                    legacy.push_str(&child.to_legacy_text());
+                    legacy.push_str(&child.to_legacy_string());
                 }
                 legacy
             }
-            _ => self.to_plain_text(),
+            _ => self.to_plain_string(),
         }
+    }
+
+    pub fn to_json_string(&self, str_type: JsonStringType) -> Result<String> {
+        let string = match str_type {
+            JsonStringType::Short => serde_json::to_string(self)?,
+            JsonStringType::Pretty => serde_json::to_string_pretty(self)?,
+        };
+        Ok(string)
     }
 }
 
@@ -371,4 +379,9 @@ pub enum TextFont {
     EnchantingTable,
     #[serde(rename = "minecraft:illageralt")]
     Illager,
+}
+
+pub enum JsonStringType {
+    Short,
+    Pretty,
 }

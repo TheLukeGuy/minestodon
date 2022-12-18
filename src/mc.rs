@@ -1,12 +1,15 @@
+use crate::mc::login::LoginDisconnect;
 use crate::mc::packet_io::{PacketReadExt, PacketWriteExt, PartialVarInt, VarInt};
 use crate::mc::pre_login::Listing;
+use crate::mc::text::{NamedTextColor, Text};
 use crate::{ServerRef, ShouldClose};
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use byteorder::{BigEndian, WriteBytesExt};
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use log::debug;
+use std::fmt::Debug;
 use std::io::{Read, Write};
 use std::net::TcpStream;
 use uuid::Uuid;
@@ -177,7 +180,7 @@ impl Connection {
             debug!("Sending a legacy (<1.4) status response.");
             format!(
                 "{}\u{00a7}{}\u{00a7}{}",
-                listing.motd.to_plain_text(),
+                listing.motd.to_plain_string(),
                 listing.players.current,
                 listing.players.max
             )
@@ -188,7 +191,7 @@ impl Connection {
                 "\u{00a7}1\0{}\0{}\0{}\0{}\0{}",
                 listing.version.value,
                 listing.version.name,
-                listing.motd.to_legacy_text(),
+                listing.motd.to_legacy_string(),
                 listing.players.current,
                 listing.players.max
             )
@@ -215,6 +218,34 @@ impl Connection {
             .context("failed to send the response")?;
 
         Ok(())
+    }
+
+    pub fn send_kick(&mut self, reason: Text) -> Result<()> {
+        match self.state {
+            ConnectionState::Login => {
+                let packet = LoginDisconnect { reason };
+                self.send_packet(packet)
+                    .context("failed to send a login disconnect packet")?;
+            }
+            ConnectionState::Play => todo!(),
+            _ => bail!("the current state doesn't support kicking"),
+        }
+        Ok(())
+    }
+
+    pub fn send_error_kick(&mut self, error: impl Debug) -> Result<()> {
+        let reason = Text::from("Minestodon Error\n\n")
+            .color(NamedTextColor::Red)
+            .underlined(true)
+            .push_sequential(Text::from(format!("{error:?}")).color(NamedTextColor::Gray))
+            .push_sequential(
+                Text::from(format!(
+                    "\n\nThis is probably not your fault! Please report it here:\n{}",
+                    crate::ISSUE_URL
+                ))
+                .color(NamedTextColor::Gold),
+            );
+        self.send_kick(reason)
     }
 
     pub fn set_state(&mut self, state: ConnectionState) {

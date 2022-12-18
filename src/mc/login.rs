@@ -1,4 +1,5 @@
 use crate::mc::packet_io::{PacketReadExt, PacketWriteExt};
+use crate::mc::text::Text;
 use crate::mc::{Connection, ConnectionState, PacketFromClient, PacketFromServer};
 use crate::{packets_from_client, ServerRef, ShouldClose};
 use anyhow::{Context, Result};
@@ -186,5 +187,20 @@ impl LoginProperty {
             buf.write_bool(false)
                 .context("failed to write the boolean indicating the signature")
         }
+    }
+}
+
+pub struct LoginDisconnect {
+    pub reason: Text,
+}
+
+impl PacketFromServer for LoginDisconnect {
+    fn id() -> i32 {
+        0x00
+    }
+
+    fn write<W: Write>(&self, buf: &mut W) -> Result<()> {
+        buf.write_text(&self.reason)
+            .context("failed to write the reason")
     }
 }

@@ -2,10 +2,12 @@ use crate::mc::pre_login::{Listing, ListingPlayers, ListingVersion};
 use crate::mc::text::{HexTextColor, Text};
 use crate::mc::Connection;
 use anyhow::{Context, Result};
-use log::{debug, error, info};
+use log::{debug, error, info, warn};
 use std::net::{TcpListener, TcpStream};
 use std::sync::{Arc, RwLock, RwLockReadGuard};
 use std::thread;
+
+pub const ISSUE_URL: &str = "https://github.com/TheLukeGuy/minestodon/issues";
 
 pub mod mc;
 
@@ -106,7 +108,13 @@ impl User {
     pub fn run(&mut self) {
         loop {
             match self.tick() {
-                Err(err) => error!("Failed to tick the user:\nError: {err:?}"),
+                Err(err) => {
+                    error!("Failed to tick the user:\nError: {err:?}");
+                    if let Err(err) = self.connection.send_error_kick(err) {
+                        warn!("Failed to kick the player after an error: {err:?}");
+                    }
+                    break;
+                }
                 Ok(ShouldClose::True) => break,
                 _ => (),
             }

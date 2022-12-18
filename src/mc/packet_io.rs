@@ -1,3 +1,4 @@
+use crate::mc::text::{JsonStringType, Text};
 use anyhow::{bail, Context, Result};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use std::num::TryFromIntError;
@@ -33,6 +34,13 @@ pub trait PacketReadExt: ReadBytesExt {
             *byte = self.read_u8().context("failed to read the next byte")?;
         }
         String::from_utf8(bytes).context("the string is not valid UTF-8")
+    }
+
+    fn read_text(&mut self) -> Result<Text> {
+        let string = self
+            .read_string()
+            .context("failed to read the text component as a string")?;
+        serde_json::from_str(&string).context("failed to deserialize the text component")
     }
 
     fn read_uuid(&mut self) -> Result<Uuid> {
@@ -84,6 +92,14 @@ pub trait PacketWriteExt: WriteBytesExt {
                 .context("failed to write the next byte")?;
         }
         Ok(())
+    }
+
+    fn write_text(&mut self, text: &Text) -> Result<()> {
+        let string = text
+            .to_json_string(JsonStringType::Pretty)
+            .context("failed to serialize the text component")?;
+        self.write_str(&string)
+            .context("failed to write the text component as a string")
     }
 
     fn write_uuid(&mut self, uuid: &Uuid) -> Result<()> {
