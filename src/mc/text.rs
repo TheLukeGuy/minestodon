@@ -390,6 +390,6 @@ pub enum JsonStringType {
 macro_rules! text {
     ($($arg:tt)*) => {{
         let formatted = ::std::format!($($arg)*);
-        <$crate::mc::text::Text as ::std::convert::From<::std::string::String>>::from(formatted)
+        $crate::mc::text::Text::String(formatted)
     }};
 }
