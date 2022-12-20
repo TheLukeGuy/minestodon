@@ -200,7 +200,8 @@ pub fn set_up(connection: &mut Connection, server: &Server) -> Result<()> {
         .send_packet(login)
         .context("failed to send the login packet")?;
 
-    let brand = PluginMessageFromServer::brand("Minestodon");
+    let brand = PluginMessageFromServer::brand("Minestodon")
+        .context("failed to create the server brand plugin message")?;
     connection
         .send_packet(brand)
         .context("failed to send the server brand")

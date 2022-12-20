@@ -13,13 +13,20 @@ pub struct PluginMessageFromServer {
 }
 
 impl PluginMessageFromServer {
-    pub fn brand<'a, I>(name: I) -> Self
+    pub fn brand<'a, I>(name: I) -> Result<Self>
     where
         I: Into<Cow<'a, str>>,
     {
-        let channel = Identifier::minecraft("brand");
-        let data = name.into().into_owned().into_bytes();
-        Self { channel, data }
+        let name = name.into();
+        let mut data = Vec::with_capacity(name.len());
+        data.write_str(&name)
+            .context("failed to write the brand name")?;
+
+        let packet = Self {
+            channel: Identifier::minecraft("brand"),
+            data,
+        };
+        Ok(packet)
     }
 }
 
