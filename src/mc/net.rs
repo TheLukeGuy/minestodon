@@ -9,7 +9,7 @@ use byteorder::{BigEndian, WriteBytesExt};
 use flate2::read::ZlibDecoder;
 use flate2::write::ZlibEncoder;
 use flate2::Compression;
-use log::debug;
+use log::{debug, warn};
 use std::fmt::Debug;
 use std::io::{Read, Write};
 use std::net::TcpStream;
@@ -114,7 +114,10 @@ impl Connection {
             ConnectionState::Handshake => pre_login::decode_handshake(id, buf),
             ConnectionState::Status => pre_login::decode_status(id, buf),
             ConnectionState::Login => login::decode(id, buf),
-            ConnectionState::Play => todo!(),
+            ConnectionState::Play => {
+                warn!("Client-to-server play packets are not yet implemented! ({id:#04x})");
+                return Ok(ShouldClose::False);
+            }
         };
         let decoded = decoded.context("failed to decode the packet")?;
         decoded
