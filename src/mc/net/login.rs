@@ -1,5 +1,6 @@
 use crate::mc::net::packet_io::{PacketReadExt, PacketWriteExt};
-use crate::mc::net::{play, Connection, ConnectionState, PacketFromClient, PacketFromServer};
+use crate::mc::net::play::setup;
+use crate::mc::net::{Connection, ConnectionState, PacketFromClient, PacketFromServer};
 use crate::mc::text::Text;
 use crate::packets_from_client;
 use crate::server::{Server, ShouldClose};
@@ -61,7 +62,7 @@ impl PacketFromClient for LoginStart {
             .context("failed to send the login success packet")?;
 
         connection.set_state(ConnectionState::Play);
-        play::init_play(connection, server).context("failed to initialize play")?;
+        setup::set_up(connection, server).context("failed to set up after login")?;
         Ok(ShouldClose::False)
     }
 }
@@ -100,9 +101,9 @@ impl PacketFromServer for LoginSuccess {
             .properties
             .len()
             .try_into()
-            .context("the property length doesn't fit in an i32")?;
+            .context("the property count doesn't fit in an i32")?;
         buf.write_var::<i32>(property_len)
-            .context("failed to write the property length")?;
+            .context("failed to write the property count")?;
         for property in &self.properties {
             property
                 .write(buf)

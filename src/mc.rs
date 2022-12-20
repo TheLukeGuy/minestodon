@@ -1,7 +1,8 @@
 use anyhow::{bail, Result};
+use serde::{Serialize, Serializer};
 use std::borrow::Cow;
-use std::fmt;
 use std::fmt::{Display, Formatter};
+use std::{fmt, result};
 
 pub mod entity;
 pub mod net;
@@ -10,6 +11,7 @@ pub mod world;
 
 pub struct Identifier {
     namespace: Cow<'static, str>,
+    // TODO: Use a `Cow<'static, str>` for the path
     path: String,
 }
 
@@ -55,5 +57,14 @@ impl Identifier {
 impl Display for Identifier {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{}:{}", self.namespace, self.path)
+    }
+}
+
+impl Serialize for Identifier {
+    fn serialize<S>(&self, serializer: S) -> result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
     }
 }
