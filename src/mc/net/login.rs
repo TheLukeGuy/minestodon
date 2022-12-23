@@ -148,7 +148,7 @@ impl PacketFromServer for LoginDisconnect {
     }
 
     fn write<W: Write>(&self, buf: &mut W) -> Result<()> {
-        buf.write_text(&self.reason)
+        buf.write_json(&self.reason)
             .context("failed to write the reason")
     }
 }

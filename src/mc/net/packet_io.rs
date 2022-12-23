@@ -1,8 +1,8 @@
-use crate::mc::text::{JsonStringType, Text};
 use crate::mc::world::BlockPos;
 use crate::mc::Identifier;
 use anyhow::{bail, Context, Result};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::num::TryFromIntError;
 use std::ops::{BitAnd, BitOrAssign, Shl};
@@ -39,11 +39,11 @@ pub trait PacketReadExt: ReadBytesExt {
         String::from_utf8(bytes).context("the string is not valid UTF-8")
     }
 
-    fn read_text(&mut self) -> Result<Text> {
+    fn read_json<D: DeserializeOwned>(&mut self) -> Result<D> {
         let string = self
             .read_string()
-            .context("failed to read the text component as a string")?;
-        serde_json::from_str(&string).context("failed to deserialize the text component")
+            .context("failed to read the JSON value as a string")?;
+        serde_json::from_str(&string).context("failed to deserialize the JSON value")
     }
 
     fn read_identifier(&mut self) -> Result<Identifier> {
@@ -120,12 +120,10 @@ pub trait PacketWriteExt: WriteBytesExt {
         Ok(())
     }
 
-    fn write_text(&mut self, text: &Text) -> Result<()> {
-        let string = text
-            .to_json_string(JsonStringType::Short)
-            .context("failed to serialize the text component")?;
+    fn write_json(&mut self, value: &impl Serialize) -> Result<()> {
+        let string = serde_json::to_string(value).context("failed to serialize as JSON")?;
         self.write_str(&string)
-            .context("failed to write the text component as a string")
+            .context("failed to write the JSON value as a string")
     }
 
     fn write_identifier(&mut self, identifier: &Identifier) -> Result<()> {
