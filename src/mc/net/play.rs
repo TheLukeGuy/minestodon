@@ -2,6 +2,7 @@ use crate::mc::net::packet_io::PacketWriteExt;
 use crate::mc::net::PacketFromServer;
 use crate::mc::Identifier;
 use anyhow::{Context, Result};
+use minestodon_macros::minecraft;
 use std::borrow::Cow;
 use std::io::Write;
 
@@ -23,7 +24,7 @@ impl PluginMessageFromServer {
             .context("failed to write the brand name")?;
 
         let packet = Self {
-            channel: Identifier::minecraft("brand"),
+            channel: minecraft!("brand"),
             data,
         };
         Ok(packet)

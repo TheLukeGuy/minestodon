@@ -1,10 +1,13 @@
 use anyhow::{Context, Result};
 use log::LevelFilter;
+use minestodon::mc::registry;
 use minestodon::server::Server;
 use simplelog::{ColorChoice, ConfigBuilder, TermLogger, TerminalMode, ThreadLogMode};
 
 fn main() -> Result<()> {
     init_logging().context("failed to initialize logging")?;
+    registry::init();
+
     Server::bind("0.0.0.0:25565")
         .context("failed to create and bind the server")?
         .run();

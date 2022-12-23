@@ -2,55 +2,34 @@ use crate::mc::entity::GameMode;
 use crate::mc::net::packet_io::PacketWriteExt;
 use crate::mc::net::play::PluginMessageFromServer;
 use crate::mc::net::{Connection, PacketFromServer};
-use crate::mc::world::{
-    Biome, BiomeEffects, BiomePrecipitation, BiomeWeather, BlockPos, DimensionEffects,
-    DimensionType, InfiniteBurnTag, MonsterSettings,
-};
-use crate::mc::Identifier;
+use crate::mc::registry::Registry;
+use crate::mc::world::{Biome, BlockPos, DimensionType};
+use crate::mc::{registry, world, Identifier};
 use crate::server::Server;
 use anyhow::Context;
 use anyhow::Result;
 use byteorder::{BigEndian, WriteBytesExt};
+use minestodon_macros::minestodon;
 use serde::Serialize;
 use std::io::Write;
 
 #[derive(Serialize)]
-pub struct Registries {
+pub struct Registries<'a> {
     #[serde(rename = "minecraft:worldgen/biome")]
-    pub biome: Registry,
+    pub biome: &'a Registry<Biome>,
     #[serde(rename = "minecraft:chat_type")]
-    pub message_type: Registry,
+    pub message_type: &'a Registry<()>,
     #[serde(rename = "minecraft:dimension_type")]
-    pub dimension_type: Registry,
+    pub dimension_type: &'a Registry<DimensionType>,
 }
 
-#[derive(Serialize)]
-#[serde(tag = "type", content = "value")]
-pub enum Registry {
-    #[serde(rename = "minecraft:worldgen/biome")]
-    Biome(Vec<RegistryEntry<Biome>>),
-    #[serde(rename = "minecraft:chat_type")]
-    MessageType(Vec<() /* TODO: Message types */>),
-    #[serde(rename = "minecraft:dimension_type")]
-    DimensionType(Vec<RegistryEntry<DimensionType>>),
-}
-
-impl Registry {}
-
-#[derive(Serialize)]
-pub struct RegistryEntry<T> {
-    pub name: Identifier,
-    pub id: i32,
-    pub element: T,
-}
-
-pub struct PlayLogin {
+pub struct PlayLogin<'a> {
     pub entity_id: i32,
     pub hardcore: bool,
     pub game_mode: GameMode,
     pub last_game_mode: Option<GameMode>,
     pub worlds: Vec<Identifier>,
-    pub registries: Registries,
+    pub registries: Registries<'a>,
     pub dimension_type: Identifier,
     pub world: Identifier,
     pub hashed_seed: i64,
@@ -64,7 +43,7 @@ pub struct PlayLogin {
     pub death_pos: Option<(Identifier, BlockPos)>,
 }
 
-impl PacketFromServer for PlayLogin {
+impl PacketFromServer for PlayLogin<'_> {
     fn id() -> i32 {
         0x24
     }
@@ -133,59 +112,14 @@ pub fn set_up(connection: &mut Connection, server: &Server) -> Result<()> {
         hardcore: false,
         game_mode: GameMode::Adventure,
         last_game_mode: None,
-        worlds: vec![Identifier::minecraft("world")],
+        worlds: vec![minestodon!("world")],
         registries: Registries {
-            dimension_type: Registry::DimensionType(vec![RegistryEntry {
-                name: Identifier::minecraft("overworld"),
-                id: 0,
-                element: DimensionType {
-                    fixed_time: None,
-                    sky_light: true,
-                    ceiling: false,
-                    ultra_warm: false,
-                    natural: true,
-                    coordinate_scale: 1.0,
-                    bed_works: true,
-                    respawn_anchor_works: false,
-                    min_height: -64,
-                    max_height: 384,
-                    max_logical_height: 384,
-                    infinite_burn_tag: InfiniteBurnTag::Overworld,
-                    effects: DimensionEffects::Overworld,
-                    ambient_light: 0.0,
-                    monster_settings: MonsterSettings {
-                        piglin_safe: false,
-                        raids: true,
-                        monster_spawn_light_level: 0,
-                        monster_spawn_block_light_limit: 0,
-                    },
-                },
-            }]),
-            biome: Registry::Biome(vec![RegistryEntry {
-                name: Identifier::minecraft("plains"),
-                id: 0,
-                element: Biome {
-                    weather: BiomeWeather {
-                        precipitation: BiomePrecipitation::Rain,
-                        temperature: 0.8,
-                        temperature_modifier: None,
-                        downfall: 0.4,
-                    },
-                    effects: BiomeEffects {
-                        fog_color: 0xc0d8ff,
-                        water_color: 0x3f76e4,
-                        water_fog_color: 0x050533,
-                        sky_color: 0x78a7ff,
-                        foliage_color: None,
-                        grass_color: None,
-                        grass_color_modifier: None,
-                    },
-                },
-            }]),
-            message_type: Registry::MessageType(vec![]),
+            biome: &registry::BIOMES,
+            message_type: &registry::MESSAGE_TYPES,
+            dimension_type: &registry::DIMENSION_TYPES,
         },
-        dimension_type: Identifier::minecraft("overworld"),
-        world: Identifier::minecraft("world"),
+        dimension_type: world::DIMENSION_TYPE,
+        world: minestodon!("world"),
         hashed_seed: 0,
         max_players: 0,
         view_distance: 32,

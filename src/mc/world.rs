@@ -1,3 +1,6 @@
+use crate::mc::registry::Registry;
+use crate::mc::Identifier;
+use minestodon_macros::{minecraft, minestodon};
 use serde::Serialize;
 
 pub struct BlockPos {
@@ -115,4 +118,81 @@ pub struct MonsterSettings {
     pub raids: bool,
     pub monster_spawn_light_level: i32,
     pub monster_spawn_block_light_limit: i32,
+}
+
+pub const BIOME: Identifier = minestodon!("tootlands");
+
+pub fn register_biomes(registry: &Registry<Biome>) {
+    registry.register(
+        BIOME,
+        Biome {
+            weather: BiomeWeather {
+                precipitation: BiomePrecipitation::Snow,
+                temperature: 0.0,
+                temperature_modifier: None,
+                downfall: 0.5,
+            },
+            effects: BiomeEffects {
+                fog_color: 0xc0d8ff,
+                water_color: 0x3f76e4,
+                water_fog_color: 0x050533,
+                sky_color: 0x050533,
+                foliage_color: None,
+                grass_color: None,
+                grass_color_modifier: None,
+            },
+        },
+    );
+
+    // Clients will disconnect with an error if we don't send the plains biome
+    registry.register(
+        minecraft!("plains"),
+        Biome {
+            weather: BiomeWeather {
+                precipitation: BiomePrecipitation::Rain,
+                temperature: 0.8,
+                temperature_modifier: None,
+                downfall: 0.4,
+            },
+            effects: BiomeEffects {
+                fog_color: 0xc0d8ff,
+                water_color: 0x3f76e4,
+                water_fog_color: 0x050533,
+                sky_color: 0x78a7ff,
+                foliage_color: None,
+                grass_color: None,
+                grass_color_modifier: None,
+            },
+        },
+    );
+}
+
+pub const DIMENSION_TYPE: Identifier = minestodon!("fediverse");
+
+pub fn register_dimension_types(registry: &Registry<DimensionType>) {
+    registry.register(
+        DIMENSION_TYPE,
+        DimensionType {
+            fixed_time: None,
+            sky_light: true,
+            ceiling: false,
+            ultra_warm: false,
+            natural: true,
+            coordinate_scale: 1.0,
+            bed_works: false,
+            respawn_anchor_works: false,
+            min_height: -64,
+            max_height: 384,
+            max_logical_height: 384,
+            infinite_burn_tag: InfiniteBurnTag::Overworld,
+            effects: DimensionEffects::Overworld,
+            ambient_light: 0.0,
+            monster_settings: MonsterSettings {
+                piglin_safe: false,
+                raids: false,
+                monster_spawn_light_level: 0,
+                monster_spawn_block_light_limit: 0,
+            },
+        },
+    );
 }

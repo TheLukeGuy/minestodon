@@ -6,23 +6,25 @@ use std::{fmt, result};
 
 pub mod entity;
 pub mod net;
+pub mod registry;
 pub mod text;
 pub mod world;
 
+#[derive(Eq, PartialEq, Hash)]
 pub struct Identifier {
     namespace: Cow<'static, str>,
-    // TODO: Use a `Cow<'static, str>` for the path
-    path: String,
+    path: Cow<'static, str>,
 }
 
 impl Identifier {
-    const MINECRAFT: &'static str = "minecraft";
+    pub const MINECRAFT: &'static str = "minecraft";
+    pub const MINESTODON: &'static str = "minestodon";
 
-    pub fn try_new(namespace: impl Into<Cow<'static, str>>, path: &str) -> Result<Self> {
+    pub fn new(namespace: impl Into<String>, path: impl Into<String>) -> Result<Self> {
         let namespace = namespace.into();
         let path = path.into();
 
-        let valid = |c: char| matches!(c, 'a'..='z' | '0'..='9' | '.' | '-' | '_');
+        let valid = |c| matches!(c, 'a'..='z' | '0'..='9' | '.' | '-' | '_');
         if !namespace.chars().all(valid) {
             bail!("the namespace contains invalid characters");
         }
@@ -30,26 +32,29 @@ impl Identifier {
             bail!("the path contains invalid characters");
         }
 
-        Ok(Self { namespace, path })
+        let identifier = Self {
+            namespace: namespace.into(),
+            path: path.into(),
+        };
+        Ok(identifier)
     }
 
-    pub fn new(namespace: impl Into<Cow<'static, str>>, path: &str) -> Self {
-        Self::try_new(namespace, path).unwrap_or_else(|err| panic!("{err}"))
-    }
-
-    pub fn try_minecraft(path: &str) -> Result<Self> {
-        Self::try_new(Self::MINECRAFT, path)
-    }
-
-    pub fn minecraft(path: &str) -> Self {
-        Self::new(Self::MINECRAFT, path)
+    /// # Safety
+    ///
+    /// The given path must contain only lowercase alphanumeric characters, dots (`.`),
+    /// dashes (`-`), underscores (`_`), and slashes (`/`).
+    pub const unsafe fn new_unchecked(namespace: &'static str, path: &'static str) -> Self {
+        Self {
+            namespace: Cow::Borrowed(namespace),
+            path: Cow::Borrowed(path),
+        }
     }
 
     pub fn parse(str: &str) -> Result<Self> {
         if let Some((namespace, path)) = str.split_once(':') {
-            Self::try_new(namespace.to_string(), path)
+            Self::new(namespace.to_string(), path)
         } else {
-            Self::try_new(Self::MINECRAFT, str)
+            Self::new(Self::MINECRAFT, str)
         }
     }
 }
