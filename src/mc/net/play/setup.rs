@@ -1,6 +1,6 @@
 use crate::mc::entity::GameMode;
 use crate::mc::net::packet_io::PacketWriteExt;
-use crate::mc::net::play::PluginMessageFromServer;
+use crate::mc::net::play::{PluginMessageFromServer, SetSpawnPos};
 use crate::mc::net::{Connection, PacketFromServer};
 use crate::mc::registry::Registry;
 use crate::mc::world::{Biome, BlockPos, DimensionType};
@@ -138,5 +138,13 @@ pub fn set_up(connection: &mut Connection, server: &Server) -> Result<()> {
         .context("failed to create the server brand plugin message")?;
     connection
         .send_packet(brand)
-        .context("failed to send the server brand")
+        .context("failed to send the server brand")?;
+
+    let set_spawn = SetSpawnPos {
+        pos: BlockPos::new(0, 0, 0),
+        angle: 0.0,
+    };
+    connection
+        .send_packet(set_spawn)
+        .context("failed to set the spawn position")
 }
