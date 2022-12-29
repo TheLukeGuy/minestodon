@@ -1,5 +1,6 @@
 use crate::mc::net::pre_login::{Listing, ListingPlayers, ListingVersion};
 use crate::mc::net::Connection;
+use crate::mc::player::Player;
 use crate::mc::text::{HexTextColor, Text};
 use anyhow::{Context, Result};
 use log::{debug, error, info, warn};
@@ -89,14 +90,15 @@ impl Clone for Server {
 
 pub struct User {
     pub server: Server,
-    pub connection: Connection,
+    connection: ConnectionOrPlayer,
 }
 
 impl User {
     pub fn new(server: Server, stream: TcpStream) -> Self {
+        let connection = Connection::new(stream);
         Self {
             server,
-            connection: Connection::new(stream),
+            connection: ConnectionOrPlayer::new(connection),
         }
     }
 
@@ -105,32 +107,66 @@ impl User {
             match self.tick() {
                 Err(err) => {
                     error!("Failed to tick the user:\nError: {err:?}");
-                    if let Err(err) = self.connection.send_error_kick(err) {
+                    if let Err(err) = self.connection.connection_mut().send_error_kick(err) {
                         warn!("Failed to kick the player after an error: {err:?}");
                     }
                     break;
                 }
-                Ok(ShouldClose::True) => break,
+                Ok(ConnectionAction::Close) => break,
                 _ => (),
             }
         }
         debug!("Closing the connection.");
     }
 
-    fn tick(&mut self) -> Result<ShouldClose> {
-        self.connection
+    fn tick(&mut self) -> Result<ConnectionAction> {
+        let action = self
+            .connection
+            .connection_mut()
             .tick(&self.server)
-            .context("failed to tick the Minecraft connection")
+            .context("failed to tick the Minecraft connection")?;
+
+        match action {
+            ConnectionAction::CreatePlayer { username } => {
+                let ConnectionOrPlayer::Connection(connection) = &mut self.connection else {
+                    panic!("the user is already a player");
+                };
+                let connection = connection.take().unwrap();
+
+                let server = Server::clone(&self.server);
+                let mut player = Player::new(connection, username, server);
+                player
+                    .finish_joining()
+                    .context("failed to finish joining")?;
+
+                self.connection = ConnectionOrPlayer::Player(player);
+                Ok(ConnectionAction::DoNothing)
+            }
+            action => Ok(action),
+        }
     }
 }
 
-pub enum ShouldClose {
-    False,
-    True,
+enum ConnectionOrPlayer {
+    Connection(Option<Connection>),
+    Player(Player),
 }
 
-impl ShouldClose {
-    pub fn is_true(&self) -> bool {
-        matches!(self, Self::True)
+impl ConnectionOrPlayer {
+    pub fn new(connection: Connection) -> Self {
+        Self::Connection(Some(connection))
     }
+
+    pub fn connection_mut(&mut self) -> &mut Connection {
+        match self {
+            ConnectionOrPlayer::Connection(connection) => connection.as_mut().unwrap(),
+            ConnectionOrPlayer::Player(player) => &mut player.connection,
+        }
+    }
+}
+
+pub enum ConnectionAction {
+    DoNothing,
+    Close,
+    CreatePlayer { username: String },
 }

@@ -4,8 +4,8 @@ use std::borrow::Cow;
 use std::fmt::{Display, Formatter};
 use std::{fmt, result};
 
-pub mod entity;
 pub mod net;
+pub mod player;
 pub mod registry;
 pub mod text;
 pub mod world;

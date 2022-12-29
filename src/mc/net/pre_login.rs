@@ -2,7 +2,7 @@ use crate::mc::net::packet_io::{PacketReadExt, PacketWriteExt};
 use crate::mc::net::{Connection, ConnectionState, PacketFromClient, PacketFromServer};
 use crate::mc::text::Text;
 use crate::packets_from_client;
-use crate::server::{Server, ShouldClose};
+use crate::server::{ConnectionAction, Server};
 use anyhow::{Context, Result};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use num_enum::TryFromPrimitive;
@@ -80,12 +80,16 @@ impl PacketFromClient for Handshake {
         Ok(packet)
     }
 
-    fn handle(&self, connection: &mut Connection, _server: &Server) -> Result<ShouldClose> {
+    fn handle(
+        self: Box<Self>,
+        connection: &mut Connection,
+        _server: &Server,
+    ) -> Result<ConnectionAction> {
         match self.next_state {
             NextState::Status => connection.set_state(ConnectionState::Status),
             NextState::Login => connection.set_state(ConnectionState::Login),
         }
-        Ok(ShouldClose::False)
+        Ok(ConnectionAction::DoNothing)
     }
 }
 
@@ -109,12 +113,16 @@ impl PacketFromClient for StatusRequest {
         Ok(Self)
     }
 
-    fn handle(&self, connection: &mut Connection, server: &Server) -> Result<ShouldClose> {
+    fn handle(
+        self: Box<Self>,
+        connection: &mut Connection,
+        server: &Server,
+    ) -> Result<ConnectionAction> {
         let response = StatusResponse(server.listing());
         connection
             .send_packet(response)
             .context("failed to send a status response packet")?;
-        Ok(ShouldClose::False)
+        Ok(ConnectionAction::DoNothing)
     }
 }
 
@@ -147,12 +155,16 @@ impl PacketFromClient for PingRequest {
         Ok(Self(payload))
     }
 
-    fn handle(&self, connection: &mut Connection, _server: &Server) -> Result<ShouldClose> {
-        let response = PingResponse(self.0);
+    fn handle(
+        self: Box<Self>,
+        connection: &mut Connection,
+        _server: &Server,
+    ) -> Result<ConnectionAction> {
+        let response = PingResponse((*self).0);
         connection
             .send_packet(response)
             .context("failed to send a ping response packet")?;
-        Ok(ShouldClose::True)
+        Ok(ConnectionAction::Close)
     }
 }
 

@@ -2,7 +2,7 @@ use crate::mc::net::login::LoginDisconnect;
 use crate::mc::net::packet_io::{PacketReadExt, PacketWriteExt, PartialVarInt, VarInt};
 use crate::mc::net::pre_login::Listing;
 use crate::mc::text::{NamedTextColor, Text};
-use crate::server::{Server, ShouldClose};
+use crate::server::{ConnectionAction, Server};
 use crate::text;
 use anyhow::{bail, Context, Result};
 use byteorder::{BigEndian, WriteBytesExt};
@@ -10,6 +10,7 @@ use flate2::read::ZlibDecoder;
 use flate2::write::ZlibEncoder;
 use flate2::Compression;
 use log::{debug, warn};
+use std::collections::VecDeque;
 use std::fmt::Debug;
 use std::io::{Read, Write};
 use std::net::TcpStream;
@@ -24,7 +25,9 @@ pub struct Connection {
     pub stream: TcpStream,
     pub uuid: Option<Uuid>,
 
+    received_bytes: VecDeque<u8>,
     packet: Option<PartialPacket>,
+
     definitely_modern: bool,
     state: ConnectionState,
     pub compressed: bool,
@@ -37,6 +40,7 @@ impl Connection {
         Self {
             stream,
             uuid: None,
+            received_bytes: VecDeque::with_capacity(1024),
             packet: None,
             definitely_modern: false,
             state: ConnectionState::Handshake,
@@ -44,23 +48,24 @@ impl Connection {
         }
     }
 
-    pub fn tick(&mut self, server: &Server) -> Result<ShouldClose> {
+    pub fn tick(&mut self, server: &Server) -> Result<ConnectionAction> {
         let mut buf = [0; 1024];
         let bytes_read = self
             .stream
             .read(&mut buf)
             .context("failed to receive data from the client")?;
         if bytes_read == 0 {
-            return Ok(ShouldClose::True);
+            return Ok(ConnectionAction::Close);
         }
 
         let read = &buf[..bytes_read];
-        for &byte in read {
+        self.received_bytes.extend(read);
+        while let Some(byte) = self.received_bytes.pop_front() {
             if !self.definitely_modern {
                 if byte == 0xfe {
                     self.send_legacy_status_response(&read[1..], server.legacy_listing())
                         .context("failed to send a legacy status response")?;
-                    return Ok(ShouldClose::True);
+                    return Ok(ConnectionAction::Close);
                 } else {
                     self.definitely_modern = true;
                 }
@@ -93,15 +98,15 @@ impl Connection {
 
                     let mut slice = &body[..];
                     let id = slice.read_var().context("failed to read the packet ID")?;
-                    let close = self.decode_and_handle_packet(id, &mut slice, server)?;
-                    if close.is_true() {
-                        return Ok(ShouldClose::True);
-                    }
+                    let action = self.decode_and_handle_packet(id, &mut slice, server)?;
+                    let ConnectionAction::DoNothing = action else {
+                        return Ok(action);
+                    };
                 }
                 partial => self.packet = Some(partial),
             };
         }
-        Ok(ShouldClose::False)
+        Ok(ConnectionAction::DoNothing)
     }
 
     pub fn decode_and_handle_packet(
@@ -109,14 +114,14 @@ impl Connection {
         id: i32,
         buf: &mut impl Read,
         server: &Server,
-    ) -> Result<ShouldClose> {
+    ) -> Result<ConnectionAction> {
         let decoded = match self.state {
             ConnectionState::Handshake => pre_login::decode_handshake(id, buf),
             ConnectionState::Status => pre_login::decode_status(id, buf),
             ConnectionState::Login => login::decode(id, buf),
             ConnectionState::Play => {
                 warn!("Client-to-server play packets are not yet implemented! ({id:#04x})");
-                return Ok(ShouldClose::False);
+                return Ok(ConnectionAction::DoNothing);
             }
         };
         let decoded = decoded.context("failed to decode the packet")?;
@@ -324,7 +329,11 @@ pub trait PacketFromClient {
     where
         Self: Sized;
 
-    fn handle(&self, connection: &mut Connection, server: &Server) -> Result<ShouldClose>;
+    fn handle(
+        self: Box<Self>,
+        connection: &mut Connection,
+        server: &Server,
+    ) -> Result<ConnectionAction>;
 }
 
 #[macro_export]

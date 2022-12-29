@@ -1,7 +1,8 @@
-use crate::mc::entity::GameMode;
 use crate::mc::net::packet_io::PacketWriteExt;
-use crate::mc::net::play::{PluginMessageFromServer, SetSpawnPos};
+use crate::mc::net::play::player::SetSpawnPos;
+use crate::mc::net::play::PluginMessageFromServer;
 use crate::mc::net::{Connection, PacketFromServer};
+use crate::mc::player::GameMode;
 use crate::mc::registry::Registry;
 use crate::mc::world::{Biome, BlockPos, DimensionType};
 use crate::mc::{registry, world, Identifier};

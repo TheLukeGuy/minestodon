@@ -1,11 +1,9 @@
 use crate::mc::net::packet_io::{PacketReadExt, PacketWriteExt};
-use crate::mc::net::play::setup;
-use crate::mc::net::{Connection, ConnectionState, PacketFromClient, PacketFromServer};
+use crate::mc::net::{Connection, PacketFromClient, PacketFromServer};
 use crate::mc::text::Text;
 use crate::packets_from_client;
-use crate::server::{Server, ShouldClose};
+use crate::server::{ConnectionAction, Server};
 use anyhow::{Context, Result};
-use log::info;
 use std::io::{Read, Write};
 use uuid::Uuid;
 
@@ -41,33 +39,19 @@ impl PacketFromClient for LoginStart {
         Ok(packet)
     }
 
-    fn handle(&self, connection: &mut Connection, server: &Server) -> Result<ShouldClose> {
-        let uuid = Uuid::new_v4();
-        info!("Assigning UUID {uuid} to player {}.", self.name);
-        connection.uuid = Some(uuid);
-
-        let compression = SetCompression(Connection::COMPRESSION_THRESHOLD);
-        connection
-            .send_packet(compression)
-            .context("failed to send the desired compression threshold")?;
-        connection.compressed = true;
-
-        let success = LoginSuccess {
-            uuid,
-            name: self.name.clone(),
-            properties: vec![],
+    fn handle(
+        self: Box<Self>,
+        _connection: &mut Connection,
+        _server: &Server,
+    ) -> Result<ConnectionAction> {
+        let action = ConnectionAction::CreatePlayer {
+            username: self.name,
         };
-        connection
-            .send_packet(success)
-            .context("failed to send the login success packet")?;
-
-        connection.set_state(ConnectionState::Play);
-        setup::set_up(connection, server).context("failed to set up after login")?;
-        Ok(ShouldClose::False)
+        Ok(action)
     }
 }
 
-pub struct SetCompression(i32);
+pub struct SetCompression(pub i32);
 
 impl PacketFromServer for SetCompression {
     fn id() -> i32 {
